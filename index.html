@@ -91,6 +91,10 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .chart svg { display: block; overflow: visible; }
   .sl .chart text { fill: var(--muted); font-size: 12px; font-family: var(--font-anthropic-sans); }
   .sl .chart text.strong { fill: var(--fg); font-weight: 700; }
+  .sl svg text:not([fill]) { fill: var(--muted); }
+  .sl { color-scheme: dark; }
+  .sl .tip, .sl .tip div { color: var(--fg); }
+  .sl .tip .t1 { color: var(--muted); }
   .sl .tip { position: absolute; pointer-events: none; z-index: 6; background: #0b0e16; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.45); padding: 6px 10px; font-size: 12px; max-width: 16rem; color: var(--fg); }
   .sl .tip .t1 { color: var(--muted); }
   .sl .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 8px; }
@@ -1185,10 +1189,14 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
 
       const { pts: all, events: allEv } = build(games);
       const seasons = [...new Set(all.map((p) => p.season))].sort();
-      const pr = param('prange', 'all'); const rng = seasons.includes(pr) ? pr : 'all';
+      // time frame: last 10 / last 30 games, this season, an earlier season, or everything since 2024
+      const cur = seasons[seasons.length - 1];
+      const opts = [['l10', 'Last 10'], ['l30', 'Last 30'], ['season', 'This season'], ...seasons.slice(0, -1).reverse().map((v) => [v, v]), ['all', 'All']];
+      const pr = param('prange', 'l30'); const rng = opts.some((o) => o[0] === pr) ? pr : 'l30';
       const seg = el('div', 'seg');
-      for (const sv of ['all', ...seasons]) { const b = el('button', null, sv === 'all' ? 'All seasons' : sv); b.setAttribute('aria-pressed', String(sv === rng)); b.onclick = () => dash.setParams({ prange: sv === 'all' ? null : sv }); seg.append(b); }
-      const pts = rng === 'all' ? all : all.filter((p) => p.season === rng);
+      for (const [k, lab] of opts) { const b = el('button', null, lab); b.setAttribute('aria-pressed', String(k === rng)); b.onclick = () => dash.setParams({ prange: k === 'l30' ? null : k }); seg.append(b); }
+      const lastN = (n) => { const pl_ = all.filter((p) => p.played); if (pl_.length <= n) return all; const from = pl_[pl_.length - n].i; return all.filter((p) => p.i >= from); };
+      const pts = rng === 'all' ? all : rng === 'l10' ? lastN(10) : rng === 'l30' ? lastN(30) : all.filter((p) => p.season === (rng === 'season' ? cur : rng));
       const shown = new Set(pts.map((p) => p.i));
       const pl = pts.filter((p) => p.played);
       // league moves for this player
@@ -1204,7 +1212,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       const tiles = el('div', 'ptiles');
       const tile = (k, v, sub) => { const d = el('div', 'stat'); d.append(el('div', 'k', k), el('div', 'v', v)); if (sub) d.append(el('div', 'muted small', sub)); tiles.append(d); };
       const fps = pl.map((p) => p.fp);
-      tile('Average', fps.length ? f1(mean(fps)) : '—', `${fps.length} games`);
+      tile('Average', fps.length ? f1(mean(fps)) : '—', `${fps.length} games in view`);
       tile('Last 5', fps.length ? f1(mean(fps.slice(-5))) : '—', pl.length ? `${f1(mean(pl.slice(-5).map((p) => p.min)))} min` : '');
       tile('Best game', fps.length ? f1(d3.max(fps)) : '—', fps.length ? fmtDate(pl[d3.maxIndex(fps)].date) : '');
       tile('30+ games', String(fps.filter((v) => v >= 30).length), fps.length ? d3.format('.0%')(fps.filter((v) => v >= 30).length / fps.length) + ' of games' : '');
@@ -1219,7 +1227,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       // missed stretches
       for (const e of evs.filter((e) => e.kind === 'miss')) svg.append('rect').attr('x', x(e.i - 0.5)).attr('width', Math.max(3, x(e.j + 0.5) - x(e.i - 0.5))).attr('y', top).attr('height', H - top - bot).attr('fill', 'rgba(255,79,123,.13)');
       // seasons: separators, labels and the season average
-      for (const sv of seasons.filter((v) => rng === 'all' || v === rng)) {
+      for (const sv of seasons) {
         const sp = pts.filter((p) => p.season === sv); if (!sp.length) continue;
         const x0 = x(sp[0].i - 0.5), x1 = x(sp[sp.length - 1].i + 0.5);
         if (sp[0].i !== pts[0].i) svg.append('line').attr('x1', x0).attr('x2', x0).attr('y1', top - 10).attr('y2', H - bot).attr('stroke', C.dim).attr('stroke-dasharray', '2 3');
