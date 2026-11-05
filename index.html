@@ -45,6 +45,9 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .sub b { color: var(--fg); }
   .sl .tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; position: sticky; top: 0; z-index: 4; background: var(--bg); padding: 10px 0; margin: 4px 0 6px; }
   .sl .tabs::-webkit-scrollbar { display: none; }
+  @media (min-width: 700px) { .sl .tabs { flex-wrap: wrap; overflow-x: visible; } }
+  @media (max-width: 699px) { .sl .tabs { -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
+    .sl .tabs.at-end { -webkit-mask-image: none; mask-image: none; } }
   .sl .tabs button, .sl .seg button { flex: none; font: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; }
   .sl .tabs button[aria-selected="true"], .sl .seg button[aria-pressed="true"] { background: var(--mint); color: #062621; border-color: var(--mint); }
   .sl .seg { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
@@ -1167,6 +1170,11 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
     window.SLshow = show;
     const onScroll = () => document.querySelectorAll('.sl .tabs').forEach((t) => t.classList.toggle('stuck', t.getBoundingClientRect().top <= 1 && window.scrollY > 40));
     window.addEventListener('scroll', onScroll, { passive: true });
+    document.querySelectorAll('.sl .tabs').forEach((t) => {   // phones: fade the right edge until the last tab is in view
+      const end = () => t.classList.toggle('at-end', t.scrollLeft + t.clientWidth >= t.scrollWidth - 4);
+      t.addEventListener('scroll', end, { passive: true }); window.addEventListener('resize', end); end();
+      t.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' })));
+    });
     document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => {   // jump to the top of the new tab when scrolled down
       const sec = document.querySelector(`[data-page="${b.dataset.tab}"]`); const bar = document.querySelector('.sl .tabs');
       if (sec && bar && sec.getBoundingClientRect().top < bar.offsetHeight) window.scrollTo({ top: window.scrollY + sec.getBoundingClientRect().top - bar.offsetHeight - 6 });
