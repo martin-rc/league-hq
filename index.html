@@ -24,10 +24,47 @@ function run() {
 }
 document.addEventListener('DOMContentLoaded', schedule);
 let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth - lastW) > 20) { lastW = innerWidth; schedule(); } });
-</script></head><body><style>
+</script></head><body><script>
+/*THEME-CORE*/ // Same block in every league page (a test keeps the copies equal).
+// Sets <html data-look> before the page paints, loads the theme's web fonts, and fills every <select class="lk-pick">.
+(() => {
+  const LOOKS = { current: 'Current', hardwood: 'Hardwood', broadcast: 'Broadcast', scorebook: 'Scorebook' };
+  const FONTS = { hardwood: 'family=Barlow:wght@400;600;700&family=Big+Shoulders+Display:wght@700;900',
+    broadcast: 'family=Saira+Condensed:ital,wght@0,600;0,800;1,800&family=Saira:wght@400;600;700',
+    scorebook: 'family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700' };
+  const KEY = 'league-look', root = document.documentElement;
+  let cur = 'current';
+  try { const s = localStorage.getItem(KEY); if (LOOKS[s]) cur = s; } catch (e) {}
+  const font = (k) => {
+    if (!FONTS[k] || document.getElementById('lk-font-' + k)) return;
+    const l = document.createElement('link'); l.rel = 'stylesheet'; l.id = 'lk-font-' + k;
+    l.href = 'https://fonts.googleapis.com/css2?' + FONTS[k] + '&display=swap'; document.head.append(l);
+  };
+  const apply = (k) => {
+    cur = LOOKS[k] ? k : 'current';
+    if (cur === 'current') root.removeAttribute('data-look'); else root.setAttribute('data-look', cur);
+    font(cur);
+    document.querySelectorAll('select.lk-pick').forEach((s) => { s.value = cur; });
+  };
+  const wire = () => document.querySelectorAll('select.lk-pick').forEach((s) => {
+    if (!s.options.length) for (const k in LOOKS) s.add(new Option(LOOKS[k], k));
+    s.value = cur; s.onchange = () => window.SLlook.set(s.value);
+  });
+  window.SLlook = {
+    looks: LOOKS, get: () => cur, wire,
+    set(k) { apply(k); try { localStorage.setItem(KEY, cur); } catch (e) {} window.dispatchEvent(new CustomEvent('sl-look', { detail: cur })); },
+  };
+  apply(cur);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();
+  window.addEventListener('storage', (e) => { if (e.key === KEY && LOOKS[e.newValue] && e.newValue !== cur) window.SLlook.set(e.newValue); });
+})();
+/*THEME-CORE-END*/
+</script>
+<style>
   .sl {
     --bg: #0f131d; --card: #191f2d; --card2: #222a3b; --line: #2c3447; --fg: #f3f5fa; --muted: #8b94aa;
     --mint: #00d3b3; --pink: #ff4f7b; --gold: #ffc53d; --purple: #8f7bff; --blue: #3fa9ff; --orange: #ff9f43;
+    --on-mint: #062621; --on-cat: #0b0f17; --tagfg: #c6bcff; --tip: #0b0e16; --dim: #4a5268;
     font-family: var(--font-anthropic-sans); color: var(--fg); background: var(--bg);
     border-radius: 18px; padding: 16px; max-width: 74rem; margin-inline: auto; font-size: 14px; line-height: 1.4;
   }
@@ -49,12 +86,12 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   @media (max-width: 699px) { .sl .tabs { -webkit-mask-image: linear-gradient(90deg, #000 82%, transparent); mask-image: linear-gradient(90deg, #000 82%, transparent); }
     .sl .tabs.at-end { -webkit-mask-image: none; mask-image: none; } }
   .sl .tabs button, .sl .seg button { flex: none; font: inherit; font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; }
-  .sl .tabs button[aria-selected="true"], .sl .seg button[aria-pressed="true"] { background: var(--mint); color: #062621; border-color: var(--mint); }
+  .sl .tabs button[aria-selected="true"], .sl .seg button[aria-pressed="true"] { background: var(--mint); color: var(--on-mint); border-color: var(--mint); }
   .sl .seg { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; align-items: center; }
   .sl .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; min-width: 0; }
   .sl .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr)); }
   .sl .mt { margin-top: 12px; }
-  .sl .explain { background: linear-gradient(135deg, rgba(0,211,179,.12), rgba(143,123,255,.12)); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .sl .explain { background: linear-gradient(135deg, color-mix(in srgb, var(--mint) 12%, transparent), color-mix(in srgb, var(--purple) 12%, transparent)); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
   .sl .explain p:last-child { margin: 0; }
   .sl .explain .big { font-size: 15px; }
   .sl .scrollx { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
@@ -64,9 +101,9 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .award .val { font-size: 12px; color: var(--mint); font-weight: 600; }
   .sl .av img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
   .sl .av { position: relative; overflow: hidden; flex: none; display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 800; text-transform: uppercase; letter-spacing: -.02em; }
-  .sl .pchip { flex: none; display: inline-grid; place-items: center; border-radius: 10px; color: #0b0f17; font-weight: 800; font-size: 11px; }
+  .sl .pchip { flex: none; display: inline-grid; place-items: center; border-radius: 10px; color: var(--on-cat); font-weight: 800; font-size: 11px; }
   .sl .banners { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); }
-  .sl .banner { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: linear-gradient(135deg, rgba(255,197,61,.18), rgba(255,197,61,.04)); border: 1px solid rgba(255,197,61,.35); }
+  .sl .banner { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--gold) 18%, transparent), color-mix(in srgb, var(--gold) 4%, transparent)); border: 1px solid color-mix(in srgb, var(--gold) 35%, transparent); }
   .sl .banner .yr { font-size: 12px; color: var(--gold); font-weight: 700; }
   .sl .list { display: flex; flex-direction: column; }
   .sl .li { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line); min-width: 0; }
@@ -76,11 +113,11 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .li .tm { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sl .li .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .sl .li .rk { width: 18px; color: var(--muted); font-weight: 700; text-align: center; flex: none; }
-  .sl .li.me { background: rgba(0,211,179,.07); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+  .sl .li.me { background: color-mix(in srgb, var(--mint) 7%, transparent); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
   .sl .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--card2); color: var(--muted); white-space: nowrap; }
-  .sl .pill.w { background: rgba(0,211,179,.16); color: var(--mint); }
-  .sl .pill.l { background: rgba(255,79,123,.16); color: var(--pink); }
-  .sl .pill.g { background: rgba(255,197,61,.16); color: var(--gold); }
+  .sl .pill.w { background: color-mix(in srgb, var(--mint) 16%, transparent); color: var(--mint); }
+  .sl .pill.l { background: color-mix(in srgb, var(--pink) 16%, transparent); color: var(--pink); }
+  .sl .pill.g { background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
   .sl .pos { color: var(--mint); }
   .sl .neg { color: var(--pink); }
   .sl .tbl { overflow: auto; max-height: 30rem; }
@@ -88,7 +125,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl th { text-align: left; font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: 8px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--card); white-space: nowrap; }
   .sl td { padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
   .sl .n { text-align: right; }
-  .sl tr.me td { background: rgba(0,211,179,.07); }
+  .sl tr.me td { background: color-mix(in srgb, var(--mint) 7%, transparent); }
   .sl td.champ::after { content: " 🏆"; }
   .sl .chart { position: relative; min-height: 12rem; }
   .sl .chart svg { display: block; overflow: visible; }
@@ -98,7 +135,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl { color-scheme: dark; }
   .sl .tip, .sl .tip div { color: var(--fg); }
   .sl .tip .t1 { color: var(--muted); }
-  .sl .tip { position: absolute; pointer-events: none; z-index: 6; background: #0b0e16; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.45); padding: 6px 10px; font-size: 12px; max-width: 16rem; color: var(--fg); }
+  .sl .tip { position: absolute; pointer-events: none; z-index: 6; background: var(--tip); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.45); padding: 6px 10px; font-size: 12px; max-width: 16rem; color: var(--fg); }
   .sl .tip .t1 { color: var(--muted); }
   .sl .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 8px; }
   .sl .chips button { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; padding: 4px; border-radius: 12px; width: 72px; }
@@ -110,7 +147,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .phead { display: flex; gap: 14px; align-items: center; }
   .sl .phead .nm { font-size: 20px; font-weight: 800; }
   .sl .tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
-  .sl .tags span { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(143,123,255,.18); color: #c6bcff; }
+  .sl .tags span { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--purple) 18%, transparent); color: var(--tagfg); }
   .sl .ring { margin-left: auto; text-align: center; flex: none; }
   .sl .stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); gap: 8px; }
   .sl .stat { background: var(--card2); border-radius: 12px; padding: 10px; }
@@ -124,7 +161,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .board-grid { display: grid; grid-template-columns: 34px repeat(8, minmax(84px, 1fr)); gap: 4px; min-width: 760px; }
   .sl .bh { font-size: 11px; color: var(--muted); font-weight: 700; display: flex; flex-direction: column; align-items: center; gap: 4px; padding-bottom: 4px; text-align: center; overflow: hidden; }
   .sl .rd { font-size: 11px; color: var(--muted); font-weight: 700; display: grid; place-items: center; }
-  .sl .tile { border-radius: 8px; padding: 6px; min-height: 54px; color: #0b0f17; position: relative; overflow: hidden; }
+  .sl .tile { border-radius: 8px; padding: 6px; min-height: 54px; color: var(--on-cat); position: relative; overflow: hidden; }
   .sl .tile .pn { font-weight: 800; font-size: 12px; line-height: 1.15; }
   .sl .tile .pm { font-size: 10px; font-weight: 600; opacity: .8; }
   .sl .tile .vb { position: absolute; right: 4px; bottom: 3px; font-size: 10px; font-weight: 800; }
@@ -138,7 +175,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .trade { background: var(--card2); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
   .sl .trade .tside { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
   .sl .slot { flex: none; width: 38px; text-align: center; font-size: 11px; font-weight: 800; padding: 4px 0; border-radius: 8px; background: var(--card2); color: var(--mint); }
-  .sl .court { background: radial-gradient(120% 90% at 50% 0%, rgba(0,211,179,.10), transparent 60%), var(--card); }
+  .sl .court { background: radial-gradient(120% 90% at 50% 0%, color-mix(in srgb, var(--mint) 10%, transparent), transparent 60%), var(--card); }
   .sl .trade { cursor: pointer; border: 1px solid transparent; }
   .sl .trade[aria-pressed="true"] { border-color: var(--mint); }
   .sl .more { display: block; width: 100%; margin-top: 8px; font: inherit; font-size: 13px; font-weight: 700; padding: 9px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); color: var(--mint); cursor: pointer; }
@@ -150,7 +187,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .fact:nth-child(4n+3) .fbig { color: var(--purple); }
   .sl .fact:nth-child(4n+4) .fbig { color: var(--blue); }
   .sl .stack { display: flex; height: 22px; border-radius: 6px; overflow: hidden; background: var(--card2); margin-top: 4px; }
-  .sl .stack i { display: grid; place-items: center; height: 100%; font-style: normal; font-size: 10px; font-weight: 800; color: #0b0f17; overflow: hidden; white-space: nowrap; }
+  .sl .stack i { display: grid; place-items: center; height: 100%; font-style: normal; font-size: 10px; font-weight: 800; color: var(--on-cat); overflow: hidden; white-space: nowrap; }
   .sl .li .tm.wrap { white-space: normal; }
   .sl .track { position: relative; height: 12px; margin-top: 6px; border-radius: 6px; background: var(--card2); }
   .sl .track i { position: absolute; top: 4px; height: 4px; border-radius: 2px; }
@@ -178,7 +215,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .mv.up { color: var(--mint); } .sl .mv.dn { color: var(--pink); }
   .sl .rkc { width: 22px; flex: none; text-align: center; }
   .sl .rkc .rk { width: auto; display: block; }
-  .sl .teaser { display: flex; align-items: center; gap: 10px; cursor: pointer; border-color: rgba(0,211,179,.45); }
+  .sl .teaser { display: flex; align-items: center; gap: 10px; cursor: pointer; border-color: color-mix(in srgb, var(--mint) 45%, transparent); }
   .sl .teaser .go { color: var(--mint); font-weight: 700; white-space: nowrap; }
   .sl .news { max-width: 46rem; }
   .sl .news .hl { font-size: 20px; font-weight: 800; line-height: 1.25; margin: 2px 0 10px; }
@@ -226,8 +263,8 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .pshead .grow { flex: 1; min-width: 0; }
   .sl .pshead .pname { font-size: 19px; font-weight: 800; line-height: 1.2; }
   .sl .pclose { flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--fg); font-size: 20px; cursor: pointer; }
-  .sl .injt { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; background: rgba(255,79,123,.16); color: var(--pink); }
-  .sl .injt.q { background: rgba(255,197,61,.16); color: var(--gold); }
+  .sl .injt { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; background: color-mix(in srgb, var(--pink) 16%, transparent); color: var(--pink); }
+  .sl .injt.q { background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
   .sl .ptiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
   .sl .ptiles .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
   .sl .ptiles .k { font-size: 11px; color: var(--muted); }
@@ -245,13 +282,13 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
 
   .sl .strong { font-weight: 800; color: var(--fg); }
   .sl .hnav { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0 0; }
-  .sl .hnav a { color: #062621; background: var(--mint); font-weight: 700; font-size: 13px; padding: 7px 12px; border-radius: 999px; text-decoration: none; }
+  .sl .hnav a { color: var(--on-mint); background: var(--mint); font-weight: 700; font-size: 13px; padding: 7px 12px; border-radius: 999px; text-decoration: none; }
   .sl .hctl { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0 2px; }
   .sl .pov { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 700; }
   .sl .pov select { max-width: 18rem; min-width: 0; text-overflow: ellipsis; }
   .sl .pov.on select { border-color: var(--mint); color: var(--mint); }
   .sl .psearch { font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); min-width: 0; width: 14rem; max-width: 100%; }
-  .sl .banner.mine { background: linear-gradient(135deg, rgba(0,211,179,.18), rgba(0,211,179,.04)); border-color: rgba(0,211,179,.4); margin-top: 10px; }
+  .sl .banner.mine { background: linear-gradient(135deg, color-mix(in srgb, var(--mint) 18%, transparent), color-mix(in srgb, var(--mint) 4%, transparent)); border-color: color-mix(in srgb, var(--mint) 40%, transparent); margin-top: 10px; }
   .sl .banner.mine .yr { color: var(--mint); }
   .sl .banner .grow { flex: 1; min-width: 0; }
   .sl .xpov { flex: none; width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); color: var(--muted); cursor: pointer; font-size: 14px; }
@@ -280,19 +317,19 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .wslide .sub { font-size: 13px; color: var(--muted); }
   .sl .wslide .sub.strong { color: var(--fg); font-weight: 700; }
   .sl .wslide .wpl { margin: 2px 0; }
-  .sl .whero { grid-column: 1 / -1; background: linear-gradient(135deg, rgba(0,211,179,.22), rgba(143,123,255,.22)); }
+  .sl .whero { grid-column: 1 / -1; background: linear-gradient(135deg, color-mix(in srgb, var(--mint) 22%, transparent), color-mix(in srgb, var(--purple) 22%, transparent)); }
   .sl .whero .big { font-size: 34px; }
   .sl .wtop { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
   .sl .wtop .nm { font-weight: 800; font-size: 16px; }
   .sl .wtop .tm { color: var(--muted); font-size: 12px; }
-  .sl .wslide.c1 { background: linear-gradient(160deg, rgba(63,169,255,.18), var(--card) 70%); }
-  .sl .wslide.c2 { background: linear-gradient(160deg, rgba(255,197,61,.18), var(--card) 70%); }
-  .sl .wslide.c3 { background: linear-gradient(160deg, rgba(0,211,179,.18), var(--card) 70%); }
-  .sl .wslide.c4 { background: linear-gradient(160deg, rgba(255,159,67,.18), var(--card) 70%); }
+  .sl .wslide.c1 { background: linear-gradient(160deg, color-mix(in srgb, var(--blue) 18%, transparent), var(--card) 70%); }
+  .sl .wslide.c2 { background: linear-gradient(160deg, color-mix(in srgb, var(--gold) 18%, transparent), var(--card) 70%); }
+  .sl .wslide.c3 { background: linear-gradient(160deg, color-mix(in srgb, var(--mint) 18%, transparent), var(--card) 70%); }
+  .sl .wslide.c4 { background: linear-gradient(160deg, color-mix(in srgb, var(--orange) 18%, transparent), var(--card) 70%); }
   .sl .wslide.c5 { background: linear-gradient(160deg, rgba(76,194,106,.18), var(--card) 70%); }
-  .sl .wslide.c6 { background: linear-gradient(160deg, rgba(255,79,123,.18), var(--card) 70%); }
+  .sl .wslide.c6 { background: linear-gradient(160deg, color-mix(in srgb, var(--pink) 18%, transparent), var(--card) 70%); }
   .sl .wslide.c7 { background: linear-gradient(160deg, rgba(224,92,214,.18), var(--card) 70%); }
-  .sl .wslide.c8 { background: linear-gradient(160deg, rgba(143,123,255,.18), var(--card) 70%); }
+  .sl .wslide.c8 { background: linear-gradient(160deg, color-mix(in srgb, var(--purple) 18%, transparent), var(--card) 70%); }
   .sl .heat .hc { border-radius: 6px; padding: 6px 0; text-align: center; font-variant-numeric: tabular-nums; }
   .sl .heat .hh { color: var(--muted); text-align: center; font-weight: 700; }
   .sl .heat .hn { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
@@ -308,15 +345,15 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
   .sl .chg { font-size: 11px; font-weight: 800; }
   .sl .chg.up { color: var(--mint); } .sl .chg.dn { color: var(--pink); }
-  .sl .slot { display: inline-block; min-width: 34px; text-align: center; padding: 2px 6px; border-radius: 7px; font-size: 10px; font-weight: 800; background: rgba(0,211,179,.14); color: var(--mint); }
+  .sl .slot { display: inline-block; min-width: 34px; text-align: center; padding: 2px 6px; border-radius: 7px; font-size: 10px; font-weight: 800; background: color-mix(in srgb, var(--mint) 14%, transparent); color: var(--mint); }
   .sl .slot.bn { background: var(--card2); color: var(--muted); }
-  .sl .slot.ir { background: rgba(255,79,123,.14); color: var(--pink); }
+  .sl .slot.ir { background: color-mix(in srgb, var(--pink) 14%, transparent); color: var(--pink); }
   .sl .how { font-size: 11px; color: var(--muted); }
   .sl .wkrow { display: grid; grid-template-columns: 52px 1fr 64px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
   .sl .wkrow:last-child { border-bottom: 0; }
   .sl .tlpick { max-height: 460px; overflow-y: auto; }
   .sl button.li.tlp { width: 100%; font: inherit; color: inherit; text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line); border-radius: 10px; cursor: pointer; padding: 8px 6px; }
-  .sl button.li.tlp.on { background: rgba(0,211,179,.12); box-shadow: inset 3px 0 0 var(--mint); }
+  .sl button.li.tlp.on { background: color-mix(in srgb, var(--mint) 12%, transparent); box-shadow: inset 3px 0 0 var(--mint); }
   .sl .tlside { background: var(--card2); border-radius: 12px; padding: 12px; min-width: 0; }
   .sl .tlside.me { box-shadow: inset 0 0 0 1px var(--mint); }
   .sl .tlside > .tm { font-size: 12px; color: var(--muted); margin: 4px 0 8px; }
@@ -361,17 +398,107 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .mp .sc.dim { color: var(--muted); font-weight: 600; }
   .sl .hls { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
   .sl .hl { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
-  .sl .hl.rec { border-color: var(--gold); box-shadow: 0 0 0 1px rgba(255,197,61,.25) inset; }
+  .sl .hl.rec { border-color: var(--gold); box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 25%, transparent) inset; }
   .sl .hl .em { font-size: 22px; line-height: 1; flex: none; }
   .sl .hl .t { font-weight: 700; font-size: 14px; line-height: 1.3; }
   .sl .hl .d { font-size: 12px; color: var(--muted); margin-top: 2px; }
-  .sl .livepill { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .04em; color: #062621; background: var(--mint); border-radius: 6px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
+  .sl .livepill { display: inline-block; font-size: 10px; font-weight: 800; letter-spacing: .04em; color: var(--on-mint); background: var(--mint); border-radius: 6px; padding: 1px 5px; margin-right: 6px; vertical-align: 1px; }
   @media (max-width: 640px) { .sl .mrow { grid-template-columns: 1fr 34px 1fr; } .sl .mp .pchip { display: none; } .sl .mnow { font-size: 22px; } }
   .sl .updbar { font-size: 12px; color: var(--muted); margin: 0 0 4px; }
   @media (max-width: 640px) {
     .sl .psearch { width: 100%; min-height: 42px; font-size: 16px; }
     .sl .pov { width: 100%; } .sl .pov select { flex: 1; width: 0; max-width: none; }
     .sl .bracket { grid-template-columns: 1fr; }
+  }
+
+  /* ================= THEMES =================
+     <html data-look="hardwood|broadcast|scorebook"> switches the look; no attribute = Current (the default above).
+     Each theme only redefines the tokens on .sl plus a few shape and type rules. Picked in the header (lk-pick),
+     saved in localStorage 'league-look', so every league page on the same site opens in the same look. */
+  .sl .lk { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; color: var(--muted); }
+  .sl .lk select { font: inherit; font-size: 13px; font-weight: 600; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; cursor: pointer; }
+  html[data-app] .sl .lk { display: none; }   /* pages inside the app use the picker in its top bar */
+  .sl .hero { flex-wrap: wrap; }
+
+  /* ---- Hardwood: light, warm floor, navy scoreboard header, orange for action ---- */
+  html[data-look="hardwood"], html[data-look="hardwood"] body { background: #efe4d1; }
+  html[data-look="hardwood"] .sl {
+    --bg: #efe4d1; --card: #fbf6ec; --card2: #f1e6d3; --line: #dccbad; --fg: #1d2433; --muted: #665c4e;
+    --mint: #1b3f8b; --pink: #c0392b; --gold: #946000; --purple: #6b4fc8; --blue: #1f6fb8; --orange: #c4501a;
+    --on-mint: #ffffff; --on-cat: #ffffff; --tagfg: #4b34a8; --tip: #fffdf8; --dim: #b9a98c;
+    font-family: "Barlow", var(--font-anthropic-sans); font-size: 15px; border-radius: 6px; }
+  html[data-look="hardwood"] .sl :is(h1, h2) { font-family: "Big Shoulders Display", Impact, "Arial Narrow", sans-serif; font-weight: 900; text-transform: uppercase; letter-spacing: .02em; }
+  html[data-look="hardwood"] .sl h1 { font-size: 30px; }
+  html[data-look="hardwood"] .sl h2 { font-size: 24px; }
+  html[data-look="hardwood"] .sl .hero { background: #18284a; color: #f7efe2; margin: 0 0 8px; padding: 14px 16px; border-radius: 4px; }
+  html[data-look="hardwood"] .sl .hero .sub { color: #b9c3d9; }
+  html[data-look="hardwood"] .sl .hero .sub b { color: #ffffff; }
+  html[data-look="hardwood"] .sl .hero .lk { color: #b9c3d9; }
+  html[data-look="hardwood"] .sl .hero .lk select { background: #233766; color: #ffffff; border-color: #3a5288; }
+  html[data-look="hardwood"] .sl .logo { background: #e2561d; border-radius: 50%; }
+  html[data-look="hardwood"] .sl .tabs { gap: 0; border-bottom: 2px solid var(--line); padding-bottom: 0; }
+  html[data-look="hardwood"] .sl .tabs button { background: transparent; border: 0; border-bottom: 3px solid transparent; border-radius: 0; margin-bottom: -2px; padding: 10px 12px 9px; text-transform: uppercase; letter-spacing: .04em; font-weight: 700; color: var(--muted); }
+  html[data-look="hardwood"] .sl .tabs button[aria-selected="true"] { background: transparent; color: var(--fg); border-bottom-color: #e2561d; }
+  html[data-look="hardwood"] .sl .card { border-radius: 4px; border-top: 3px solid #18284a; box-shadow: 0 1px 0 var(--line); }
+  html[data-look="hardwood"] .sl :is(.seg button, .pill, .tags span, .injt, .hnav a, .psearch, .pov select, .tile, .banner, .explain, .slot) { border-radius: 4px; }
+
+  /* ---- Broadcast: TV graphics, condensed italic caps, red labels, yellow for you ---- */
+  html[data-look="broadcast"], html[data-look="broadcast"] body { background: #07090f; }
+  html[data-look="broadcast"] .sl {
+    --bg: #07090f; --card: #111522; --card2: #1a2033; --line: #283049; --fg: #f2f4fa; --muted: #8f97ae;
+    --mint: #ffd21f; --pink: #ff3d50; --gold: #ffab2e; --purple: #a084ff; --blue: #33d6ff; --orange: #ff7a3d;
+    --on-mint: #231c00; --on-cat: #0b0f17; --tagfg: #cdbdff; --tip: #0b0e16; --dim: #3a4361;
+    font-family: "Saira", var(--font-anthropic-sans); border-radius: 0; }
+  html[data-look="broadcast"] .sl :is(h1, h2, h3) { font-family: "Saira Condensed", "Arial Narrow", sans-serif; font-style: italic; font-weight: 800; text-transform: uppercase; letter-spacing: .01em; }
+  html[data-look="broadcast"] .sl h1 { font-size: 26px; }
+  html[data-look="broadcast"] .sl h2 { width: fit-content; max-width: 100%; font-size: 19px; background: #ff3d50; color: #ffffff; padding: 4px 26px 4px 12px; clip-path: polygon(0 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+  html[data-look="broadcast"] .sl .logo { background: #ff3d50; border-radius: 0; clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%); width: 52px; }
+  html[data-look="broadcast"] .sl .tabs button { border-radius: 2px; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; background: var(--card); }
+  html[data-look="broadcast"] .sl .tabs button[aria-selected="true"] { background: var(--card2); color: var(--fg); border-color: var(--line); box-shadow: inset 0 -3px 0 #ff3d50; }
+  html[data-look="broadcast"] .sl .card { border-radius: 0; border-color: var(--line); }
+  html[data-look="broadcast"] .sl :is(.seg button, .pill, .tags span, .injt, .hnav a, .psearch, .pov select, .tile, .banner, .explain, .slot, .lk select, .psheet .pbox) { border-radius: 2px; }
+
+  /* ---- Scorebook: dense, hairlines, graph paper; light by default, dark when the device is dark ---- */
+  html[data-look="scorebook"], html[data-look="scorebook"] body { background: #f7f7f3; }
+  html[data-look="scorebook"] .sl {
+    --bg: #f7f7f3; --card: #ffffff; --card2: #f0f0ea; --line: #d6d9cf; --fg: #1b1f1a; --muted: #596056;
+    --mint: #1d7a4c; --pink: #b5322a; --gold: #8a5b00; --purple: #5a47b0; --blue: #2d5aa6; --orange: #b0501a;
+    --on-mint: #ffffff; --on-cat: #ffffff; --tagfg: #4a3a99; --tip: #ffffff; --dim: #c3c7bc; --grid: #e9eae3;
+    font-family: "IBM Plex Sans", var(--font-anthropic-sans); font-size: 13.5px; border-radius: 0;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; }
+  @media (prefers-color-scheme: dark) {
+    html[data-look="scorebook"]:not([data-theme="light"]), html[data-look="scorebook"]:not([data-theme="light"]) body { background: #121518; }
+    html[data-look="scorebook"]:not([data-theme="light"]) .sl {
+      --bg: #121518; --card: #181c20; --card2: #20252a; --line: #30373d; --fg: #e3e7e4; --muted: #9aa29d;
+      --mint: #4cc38a; --pink: #ff7b6e; --gold: #e3b341; --purple: #a594ff; --blue: #7fa8ff; --orange: #f0965a;
+      --on-mint: #08210f; --on-cat: #0b0f17; --tagfg: #c9c0ff; --tip: #0d1013; --dim: #3a4249; --grid: #171b1f; } }
+  html[data-look="scorebook"][data-theme="dark"], html[data-look="scorebook"][data-theme="dark"] body { background: #121518; }
+  html[data-look="scorebook"][data-theme="dark"] .sl {
+    --bg: #121518; --card: #181c20; --card2: #20252a; --line: #30373d; --fg: #e3e7e4; --muted: #9aa29d;
+    --mint: #4cc38a; --pink: #ff7b6e; --gold: #e3b341; --purple: #a594ff; --blue: #7fa8ff; --orange: #f0965a;
+    --on-mint: #08210f; --on-cat: #0b0f17; --tagfg: #c9c0ff; --tip: #0d1013; --dim: #3a4249; --grid: #171b1f; }
+  html[data-look="scorebook"] .sl h1 { font-size: 19px; font-weight: 600; }
+  html[data-look="scorebook"] .sl h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .1em; border-bottom: 1px solid var(--fg); padding-bottom: 5px; }
+  html[data-look="scorebook"] .sl :is(td, .big, .mnow) { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+  html[data-look="scorebook"] .sl :is(td, .big, .mnow) :is(b, span, div, a) { font-family: "IBM Plex Sans", var(--font-anthropic-sans); }
+  html[data-look="scorebook"] .sl .logo { background: transparent; border: 1.5px solid var(--fg); border-radius: 0; width: 36px; height: 36px; font-size: 18px; }
+  html[data-look="scorebook"] .sl .tabs { gap: 0; }
+  html[data-look="scorebook"] .sl .tabs button { border-radius: 0; background: var(--card); margin-left: -1px; font-weight: 500; }
+  html[data-look="scorebook"] .sl .tabs button[aria-selected="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  html[data-look="scorebook"] .sl .card { border-radius: 0; box-shadow: none; padding: 12px; }
+  html[data-look="scorebook"] .sl :is(.seg button, .pill, .tags span, .injt, .hnav a, .psearch, .pov select, .tile, .banner, .explain, .slot, .lk select, .psheet .pbox, .tip) { border-radius: 0; }
+
+  /* Broadcast and Scorebook: the section menu becomes a sidebar on wide screens */
+  @media (min-width: 1100px) {
+    html:is([data-look="broadcast"], [data-look="scorebook"]) .sl { max-width: 84rem; display: grid; grid-template-columns: 190px minmax(0, 1fr); column-gap: 18px; row-gap: 0; align-items: start; }
+    html:is([data-look="broadcast"], [data-look="scorebook"]) .sl > * { grid-column: 2; min-width: 0; }
+    html:is([data-look="broadcast"], [data-look="scorebook"]) .sl > .tabs { grid-column: 1; grid-row: 1 / span 40; flex-direction: column; flex-wrap: nowrap; gap: 2px; margin: 0; padding: 4px 0; top: 8px; align-self: start; box-shadow: none; -webkit-mask-image: none; mask-image: none; }
+    html:is([data-look="broadcast"], [data-look="scorebook"]) .sl > .tabs button { width: 100%; text-align: left; margin-left: 0; }
+    html[data-look="broadcast"] .sl > .tabs button { background: transparent; border-color: transparent; }
+    html[data-look="broadcast"] .sl > .tabs button[aria-selected="true"] { background: var(--card2); box-shadow: inset 3px 0 0 #ff3d50; }
+    html[data-look="scorebook"] .sl > .tabs { border-right: 1px solid var(--line); padding-right: 10px; }
+    html[data-look="scorebook"] .sl > .tabs button { background: transparent; border-color: transparent; }
+    html[data-look="scorebook"] .sl > .tabs button[aria-selected="true"] { background: var(--card2); color: var(--fg); border-color: transparent; box-shadow: inset 2px 0 0 var(--fg); font-weight: 600; }
   }
 </style>
 
@@ -382,6 +509,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       <h1 id="top">🅱️🅱️ League HQ</h1>
       <div class="sub">3 seasons · 8 managers · champions <b data-draw="champs" data-source="champs">—</b></div>
     </div>
+    <label class="lk"><span>Theme</span><select class="lk-pick" aria-label="Theme"></select></label>
   </div>
   <div class="updbar" data-draw="updated" data-source="data_meta"></div>
   <div class="hctl">
@@ -539,7 +667,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
     </div>
     <h2>Lineup value right now</h2>
     <div class="card">
-      <div class="legend"><span><i class="dot" style="background:#3fa9ff"></i>Guards (PG, SG, G)</span><span><i class="dot" style="background:#8f7bff"></i>Forwards (SF, PF, F)</span><span><i class="dot" style="background:#ff9f43"></i>Center</span><span><i class="dot" style="background:#00d3b3"></i>UTIL</span><span><i class="dot" style="background:rgba(255,79,123,.5)"></i>Lost to injuries</span></div>
+      <div class="legend"><span><i class="dot" style="background:var(--blue)"></i>Guards (PG, SG, G)</span><span><i class="dot" style="background:var(--purple)"></i>Forwards (SF, PF, F)</span><span><i class="dot" style="background:var(--orange)"></i>Center</span><span><i class="dot" style="background:var(--mint)"></i>UTIL</span><span><i class="dot" style="background:color-mix(in srgb, var(--pink) 50%, transparent)"></i>Lost to injuries</span></div>
       <div class="list" data-draw="tvbars" data-source="team_value"></div>
     </div>
     <h2>Value over time</h2>
@@ -857,7 +985,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       <div class="seg"><select data-draw="histmgr" data-source="managers" aria-label="Manager"></select></div>
       <p class="muted small" data-draw="histsum" data-source="weekly">—</p>
       <div class="chart" id="hist" data-draw="hist" data-source="weekly"></div>
-      <div class="legend mt"><span><i class="dot" style="background: #4a5268"></i>Whole league</span><span><i class="dot" style="background: var(--mint)"></i>Picked manager</span></div>
+      <div class="legend mt"><span><i class="dot" style="background: var(--dim)"></i>Whole league</span><span><i class="dot" style="background: var(--mint)"></i>Picked manager</span></div>
     </div>
 
     <div class="grid mt">
@@ -925,7 +1053,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
     </div>
     <div class="card mt">
       <h3>Every week, every team</h3>
-      <div class="legend"><span><i class="dot" style="background: var(--mint)"></i>Win</span><span><i class="dot" style="background: #4a5268"></i>Loss or tie</span><span>| median</span></div>
+      <div class="legend"><span><i class="dot" style="background: var(--mint)"></i>Win</span><span><i class="dot" style="background: var(--dim)"></i>Loss or tie</span><span>| median</span></div>
       <p class="muted small">One dot a week. A wide spread is a boom-or-bust team.</p>
       <div class="chart" id="strip" data-draw="strip" data-source="weekly"></div>
     </div>
@@ -951,7 +1079,11 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
     let POVSTORE = null; try { POVSTORE = localStorage.getItem('hq-pov'); } catch (e) {}
     const me = () => { const v = dash.params().pov; return v === undefined ? (POVSTORE ?? DEFAULT_POV) : (v || ''); };
     const setPov = (n) => { POVSTORE = n || ''; try { localStorage.setItem('hq-pov', POVSTORE); } catch (e) {} dash.setParams({ pov: n || '' }); };
-    const C = { mint: '#00d3b3', pink: '#ff4f7b', gold: '#ffc53d', purple: '#8f7bff', blue: '#3fa9ff', orange: '#ff9f43', muted: '#8b94aa', dim: '#4a5268', line: '#2c3447', fg: '#f3f5fa' };
+    const C = { mint: '#00d3b3', pink: '#ff4f7b', gold: '#ffc53d', purple: '#8f7bff', blue: '#3fa9ff', orange: '#ff9f43', muted: '#8b94aa', dim: '#4a5268', line: '#2c3447', fg: '#f3f5fa', bg: '#0f131d', card2: '#222a3b' };
+    // Theme: charts take their colors from the page's CSS variables, so a theme switch re-reads them and redraws.
+    const readTheme = () => { const n = document.querySelector('.sl'); if (!n) return; const cs = getComputedStyle(n);
+      for (const k of Object.keys(C)) { const v = cs.getPropertyValue('--' + k).trim(); if (v) C[k] = v; } };
+    readTheme(); window.addEventListener('sl-look', () => { readTheme(); dash.setParams({}); });
     const AV = ['#ff4f7b', '#3fa9ff', '#00b39a', '#8f7bff', '#ff9f43', '#e05cd6', '#4cc26a', '#f2b33d', '#5b7cfa', '#e8615a'];
     const hash = (s) => [...String(s)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
     const rows = (id) => { const d = dash.data(id); return d.status === 'ok' ? d.data : null; };
@@ -985,7 +1117,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
         const inner = size - 4;
         s.style.backgroundImage = `url("${HEADS.src}")`; s.style.backgroundSize = `${HEADS.cols * inner}px auto`;
         s.style.backgroundPosition = `${-(i % HEADS.cols) * inner + 2}px ${-Math.floor(i / HEADS.cols) * inner + 2}px`;
-        s.style.backgroundRepeat = 'no-repeat'; s.style.backgroundOrigin = 'border-box'; s.style.border = `2px solid ${posColor(pos)}`; s.style.backgroundColor = '#222a3b';
+        s.style.backgroundRepeat = 'no-repeat'; s.style.backgroundOrigin = 'border-box'; s.style.border = `2px solid ${posColor(pos)}`; s.style.backgroundColor = 'var(--card2)';
         s.title = player;
       }
       return s;
@@ -1804,7 +1936,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       const tp = SL.tip(node);
       const x = d3.scalePoint(weeks, [L, W - R]).padding(0.2), y = d3.scaleLinear([1, n], [16, H - 22]);
       const curW = +cur.slice(5);
-      svg.append('rect').attr('x', x(curW) - 14).attr('width', 28).attr('y', 4).attr('height', H - 18).attr('rx', 8).attr('fill', 'rgba(0,211,179,.08)');
+      svg.append('rect').attr('x', x(curW) - 14).attr('width', 28).attr('y', 4).attr('height', H - 18).attr('rx', 8).style('fill', 'color-mix(in srgb, var(--mint) 8%, transparent)');
       for (const wk of weeks) svg.append('text').attr('x', x(wk)).attr('y', H - 4).attr('text-anchor', 'middle').style('font-size', '10px').attr('fill', C.muted).text(`Wk ${wk}`);
       for (let k = 1; k <= n; k++) svg.append('text').attr('x', 4).attr('y', y(k)).attr('dy', '0.35em').style('font-size', '10px').attr('fill', C.muted).text(k);
       const by = d3.group(data, (r) => r.manager);
@@ -1947,7 +2079,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       const ymax = Math.max(40, d3.max(fps) || 0) * 1.05, y = d3.scaleLinear([0, ymax], [H - bot, top]);
       for (const v of y.ticks(4)) { svg.append('line').attr('x1', 24).attr('x2', W - 6).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', C.line); svg.append('text').attr('x', 0).attr('y', y(v)).attr('dy', '0.35em').style('font-size', '10px').attr('fill', C.muted).text(v); }
       // missed stretches
-      for (const e of evs.filter((e) => e.kind === 'miss')) svg.append('rect').attr('x', x(e.i - 0.5)).attr('width', Math.max(3, x(e.j + 0.5) - x(e.i - 0.5))).attr('y', top).attr('height', H - top - bot).attr('fill', 'rgba(255,79,123,.13)');
+      for (const e of evs.filter((e) => e.kind === 'miss')) svg.append('rect').attr('x', x(e.i - 0.5)).attr('width', Math.max(3, x(e.j + 0.5) - x(e.i - 0.5))).attr('y', top).attr('height', H - top - bot).style('fill', 'color-mix(in srgb, var(--pink) 13%, transparent)');
       // seasons: separators, labels and the season average
       for (const sv of seasons) {
         const sp = pts.filter((p) => p.season === sv); if (!sp.length) continue;
@@ -1977,7 +2109,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       }
       const legend = el('div', 'plegend');
       const lg = (c, t) => { const s = el('span'); const i = el('i'); i.style.background = c; s.append(i, document.createTextNode(t)); legend.append(s); };
-      lg(C.mint, '5-game average'); lg(C.gold, 'season average (dashed) and 30+ games'); lg(C.blue, 'each game'); lg('rgba(255,79,123,.45)', 'missed games');
+      lg(C.mint, '5-game average'); lg(C.gold, 'season average (dashed) and 30+ games'); lg(C.blue, 'each game'); lg('color-mix(in srgb, var(--pink) 45%, transparent)', 'missed games');
       const legend2 = el('div', 'plegend', '▲▼ minutes change · 🩹 missed games · ✈ new NBA team · 🎯 drafted · ➕ picked up · 🔁 traded');
 
       // key moments
@@ -2094,7 +2226,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
         for (let k = 1; k <= n; k++) {
           const v = +(sd.find((x) => x.manager === r.manager && +x.seed === k) || {}).pct || 0;
           const c = mark(el('div', 'hc', v >= 0.5 ? String(Math.round(v)) : ''), 'race_seeds', 'pct', `manager=${enc(r.manager)}&seed=${k}`);
-          const a = Math.min(1, v / 50); c.style.background = k <= 6 ? `rgba(0,211,179,${0.06 + 0.7 * a})` : `rgba(255,79,123,${0.06 + 0.7 * a})`; c.style.color = a > 0.55 ? '#062621' : 'var(--fg)';
+          const a = Math.min(1, v / 50); c.style.background = k <= 6 ? `color-mix(in srgb, var(--mint) ${Math.round(6 + 70 * a)}%, transparent)` : `color-mix(in srgb, var(--pink) ${Math.round(6 + 70 * a)}%, transparent)`; c.style.color = a > 0.55 ? 'var(--on-mint)' : 'var(--fg)';
           c.title = `${r.manager}: ${P(v)} to finish ${k}`; g.append(c);
         }
       }
@@ -2156,7 +2288,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
         top.append(el('span', null, r.team)); g.append(top, el('div', 'tm', `${r.manager} · MVP ${r.mvp} (${r.mvp_value})${+r.hurt ? ` · ${r.hurt} hurt` : ''}`));
         const st = el('div', 'stack'); st.style.width = (100 * r.full_value / hi) + '%';
         for (const k of ['guards', 'forwards', 'centers', 'util']) { const i = el('i'); i.style.width = (100 * r[k] / r.full_value) + '%'; i.style.background = GC[k]; i.title = `${k}: ${r[k]}`; st.append(i); }
-        if (+r.injury_cost > 0) { const i = el('i'); i.style.width = (100 * r.injury_cost / r.full_value) + '%'; i.style.background = 'rgba(255,79,123,.5)'; i.title = `lost to injuries: ${r.injury_cost}`; st.append(i); }
+        if (+r.injury_cost > 0) { const i = el('i'); i.style.width = (100 * r.injury_cost / r.full_value) + '%'; i.style.background = 'color-mix(in srgb, var(--pink) 50%, transparent)'; i.title = `lost to injuries: ${r.injury_cost}`; st.append(i); }
         g.append(st);
         const n = el('div', 'num'); const v = mark(el('div', null, f1(r.lineup_value)), 'team_value', 'lineup_value', w); v.style.fontWeight = '800'; v.style.fontSize = '17px';
         const ch = +r.value_change; n.append(v, r.value_change === '' ? el('div', 'tm', 'a game') : el('div', 'chg ' + (ch > 0 ? 'up' : ch < 0 ? 'dn' : ''), `${ch > 0 ? '▲' : ch < 0 ? '▼' : ''}${f1(Math.abs(ch))} since last week`));
@@ -2691,7 +2823,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
         d.v.forEach((v, k) => {
           svg.append('rect').attr('x', x(acc) + (k ? 1 : 0)).attr('y', i * rowH + 6).attr('height', rowH - 12).attr('width', Math.max(0, x(acc + v) - x(acc) - (k ? 1 : 0))).attr('fill', cols[k]).attr('rx', 3)
             .on('pointermove', (ev) => t.show(ev, d.name, [`${['Guards', 'Forwards', 'Centers'][k]}: ${d3.format('.0%')(v)} of picks`])).on('pointerleave', () => t.hide());
-          if (x(acc + v) - x(acc) > 30) svg.append('text').attr('x', x(acc) + 5).attr('y', i * rowH + rowH / 2).attr('dy', '0.35em').style('fill', '#0b0f17').style('font-weight', 700).attr('pointer-events', 'none').text(d3.format('.0%')(v));
+          if (x(acc + v) - x(acc) > 30) svg.append('text').attr('x', x(acc) + 5).attr('y', i * rowH + rowH / 2).attr('dy', '0.35em').style('fill', 'var(--on-cat)').style('font-weight', 700).attr('pointer-events', 'none').text(d3.format('.0%')(v));
           acc += v;
         });
       });
@@ -3371,7 +3503,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
         const cy = top + i * rowH + rowH / 2, mine = isMe(r.manager);
         svg.append('text').attr('x', 0).attr('y', cy).attr('dy', '0.35em').style('font-size', '12px').attr('font-weight', mine ? 800 : 500).attr('fill', mine ? C.mint : C.fg).text(cut(r.manager));
         svg.append('line').attr('x1', x(+r.strength_lo)).attr('x2', x(+r.strength_hi)).attr('y1', cy).attr('y2', cy).attr('stroke', avColor(r.manager)).attr('stroke-width', 4).attr('stroke-linecap', 'round').attr('stroke-opacity', 0.45);
-        svg.append('circle').attr('cx', x(+r.exp_score)).attr('cy', cy).attr('r', mine ? 7 : 6).attr('fill', avColor(r.manager)).attr('stroke', mine ? C.fg : '#0f131d').attr('stroke-width', 2)
+        svg.append('circle').attr('cx', x(+r.exp_score)).attr('cy', cy).attr('r', mine ? 7 : 6).attr('fill', avColor(r.manager)).attr('stroke', mine ? C.fg : C.bg).attr('stroke-width', 2)
           .on('pointermove', (ev) => t.show(ev, r.manager, [`Expected ${f1(r.exp_score)} pts a week`, `90% range ${f1(r.strength_lo)} to ${f1(r.strength_hi)}`, `Scored ${r.ppw || '—'} a week so far`])).on('pointerleave', () => t.hide());
         svg.append('text').attr('x', W - 2).attr('y', cy).attr('dy', '0.35em').attr('text-anchor', 'end').attr('font-weight', 700).style('font-size', '11px').attr('fill', C.fg).text(f1(r.exp_score));
       });
@@ -3455,7 +3587,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       svg.append('line').attr('x1', x(x0)).attr('x2', x(x1)).attr('y1', y(fy(x0))).attr('y2', y(fy(x1))).attr('stroke', C.dim).attr('stroke-dasharray', '4 4');
       for (const d of L) {
         const mine = isMe(d.m), res = d.y - fy(d.x);
-        svg.append('circle').attr('cx', x(d.x)).attr('cy', y(d.y)).attr('r', mine ? 8 : 6).attr('fill', avColor(d.m)).attr('stroke', mine ? C.fg : '#0f131d').attr('stroke-width', 2)
+        svg.append('circle').attr('cx', x(d.x)).attr('cy', y(d.y)).attr('r', mine ? 8 : 6).attr('fill', avColor(d.m)).attr('stroke', mine ? C.fg : C.bg).attr('stroke-width', 2)
           .on('pointermove', (ev) => tt.show(ev, d.m, [`Lineup value ${f1(d.x)} a game`, `Scored ${f1(d.y)} a week`, res < 0 ? `Roster is ${f1(-res)} a week better than the scores` : `Scoring ${f1(res)} a week above the roster`])).on('pointerleave', () => tt.hide());
         const ax = x(d.x) > W - 70 ? 'end' : x(d.x) < l + 40 ? 'start' : 'middle';
         svg.append('text').attr('x', x(d.x) + (ax === 'end' ? 6 : ax === 'start' ? -6 : 0)).attr('y', y(d.y) - 10).attr('text-anchor', ax).style('font-size', '10px').attr('fill', mine ? C.fg : C.muted).attr('pointer-events', 'none').text(cut(d.m));
@@ -3472,7 +3604,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
         for (const [k, l] of K) {
           const k1 = rank[r.manager + '|' + k], a = 1 - (k1 - 1) / Math.max(1, n - 1);
           const c = mark(el('div', 'hc', String(k1)), 'team_value', k, `manager=${enc(r.manager)}`);
-          c.style.background = a >= 0.5 ? `rgba(0,211,179,${0.12 + 0.6 * (a - 0.5) * 2})` : `rgba(255,79,123,${0.12 + 0.6 * (0.5 - a) * 2})`; c.title = `${r.manager}: ${l} ${f1(r[k])} (#${k1})`; g.append(c);
+          c.style.background = a >= 0.5 ? `color-mix(in srgb, var(--mint) ${Math.round(12 + 120 * (a - 0.5))}%, transparent)` : `color-mix(in srgb, var(--pink) ${Math.round(12 + 120 * (0.5 - a))}%, transparent)`; c.title = `${r.manager}: ${l} ${f1(r[k])} (#${k1})`; g.append(c);
         }
       }
       node.replaceChildren(g);
