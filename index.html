@@ -51,7 +51,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
     s.value = cur; s.onchange = () => window.SLlook.set(s.value);
   });
   window.SLlook = {
-    looks: LOOKS, get: () => cur, wire,
+    looks: LOOKS, get: () => cur, wire, font,   // font(k) loads a theme's web fonts (share images use it)
     set(k) { apply(k); try { localStorage.setItem(KEY, cur); } catch (e) {} window.dispatchEvent(new CustomEvent('sl-look', { detail: cur })); },
   };
   apply(cur);
@@ -410,6 +410,22 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
     .sl .pov { width: 100%; } .sl .pov select { flex: 1; width: 0; max-width: none; }
     .sl .bracket { grid-template-columns: 1fr; }
   }
+
+  /* Share-image preview (dialog inside .sl, so it takes the page's theme tokens) */
+  .sl .shp { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--fg); box-sizing: border-box; }
+  .sl .shp[open] { display: flex; flex-direction: column; gap: 10px; }
+  .sl .shp::backdrop { background: rgba(0, 0, 0, .6); }
+  .sl .shp-top { display: flex; align-items: baseline; gap: 10px; } .sl .shp-hint { font-size: 12px; color: var(--muted); }
+  .sl .shp-looks { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sl .shp-looks button, .sl .shp-act button { font: inherit; font-size: 13px; font-weight: 600; padding: 7px 12px; min-height: 36px; border-radius: 999px; border: 1px solid var(--line); background: var(--card2); color: var(--fg); cursor: pointer; }
+  .sl .shp-looks button[aria-pressed="true"] { background: var(--mint); color: var(--on-mint); border-color: var(--mint); }
+  .sl .shp-img { flex: 1 1 auto; min-height: 120px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--card2); }
+  .sl .shp-img img { display: block; width: 100%; height: auto; }
+  .sl .shp-act { display: flex; justify-content: flex-end; gap: 8px; }
+  .sl .shp-act .shp-save { background: var(--mint); color: var(--on-mint); border-color: var(--mint); }
+  .sl .shp-act .shp-save:disabled { opacity: .5; cursor: wait; }
+  html:is([data-look="broadcast"], [data-look="scorebook"], [data-look="hardwood"]) .sl .shp :is(button, .shp-img) { border-radius: 2px; }
+  html:is([data-look="broadcast"], [data-look="scorebook"], [data-look="hardwood"]) .sl .shp { border-radius: 4px; }
 
   /* ================= THEMES =================
      <html data-look="hardwood|broadcast|scorebook"> switches the look; no attribute = Default (the look above).
@@ -1196,7 +1212,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       return card;
     };
     const pick = () => me() || ([...(rows('managers') || [])].sort((a, b) => b.power - a.power)[0] || {}).manager || '';
-    return { me, setPov, pick, C, PICS, rows, enc, sign, el, mark, av, avColor, pchip, posColor, empty, tip, svgIn, textW, td, pct3, param, mgrSelect, resultPill, finishPill, scoutCard, labelCells };
+    return { me, setPov, pick, C, PICS, HEADS, rows, enc, sign, el, mark, av, avColor, pchip, posColor, empty, tip, svgIn, textW, td, pct3, param, mgrSelect, resultPill, finishPill, scoutCard, labelCells };
   })();
 </script>
 
@@ -1620,72 +1636,262 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
 </script>
 
 <script>
-  // ---------- Share as image: draws a card as a PNG on a canvas (share sheet on phones, download elsewhere) ----------
+  // ---------- Share as image: draws a card as a PNG on a canvas, shows a preview (switch the image's theme there),
+  // then the share sheet on phones or a download elsewhere ----------
   // Buttons with data-share="<kind>" anywhere on the page; the image is drawn from the same data as the card.
+  // Each theme has its own image style below (colors, fonts, header). Rows grow to fit their lines, and every text is
+  // fitted to its width; canvas.__layout records each row's band and ink so the share test can check nothing spills.
   (() => {
     const { rows, param } = SL;
-    const font = (wt, px) => `${wt} ${px}px system-ui, -apple-system, Segoe UI, sans-serif`;
-    const W = 1080, PAD = 60;
-    const fit = (g, s, w) => { if (g.measureText(s).width <= w) return s; while (s.length > 4 && g.measureText(s + '…').width > w) s = s.slice(0, -1); return s + '…'; };
-    const wrap = (g, s, w) => { const out = []; let line = ''; for (const word of String(s).split(/\s+/)) { const t = line ? line + ' ' + word : word; if (g.measureText(t).width > w && line) { out.push(line); line = word; } else line = t; } if (line) out.push(line); return out; };
-    const finish = async (c, name, title) => {
-      const blob = await new Promise((res) => c.toBlob(res, 'image/png'));
+    const W = 1080, PAD = 60, SYS = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+    const IMG = {
+      current: { name: 'Default', bg: ['#0f131d', '#1b1730'], fg: '#f3f5fa', body: '#c7cede', sub: '#b8c0d4', muted: '#8b94aa', accent: '#00d3b3', foot: '#6b7489', up: '#00d3b3', down: '#ff5c7a',
+        rowA: 'rgba(255,255,255,0.06)', rowB: 'rgba(255,255,255,0.03)', radius: 10, head: SYS, text: SYS, num: SYS, hw: 800, caps: false },
+      hardwood: { name: 'Hardwood', bg: ['#efe4d1', '#e8dbc3'], fg: '#1d2433', body: '#2f3646', sub: '#4f473b', muted: '#665c4e', accent: '#c4501a', foot: '#7a6d5a', up: '#1f7a3e', down: '#c0392b', ring: '#18284a',
+        rowA: '#fbf6ec', rowB: '#f6eee0', line: '#dccbad', radius: 4, band: '#18284a', bandFg: '#f7efe2', bandKick: '#ff9a5c', stripe: '#e2561d',
+        head: '"Big Shoulders Display", Impact, "Arial Narrow", sans-serif', text: `"Barlow", ${SYS}`, num: '"Big Shoulders Display", Impact, sans-serif', hw: 900, caps: true },
+      broadcast: { name: 'Broadcast', bg: ['#07090f', '#0d1120'], fg: '#f2f4fa', body: '#c9cfdf', sub: '#aab2c7', muted: '#8f97ae', accent: '#ffd21f', foot: '#6f7894', up: '#ffd21f', down: '#ff3d50', square: true, ring: '#ff3d50',
+        rowA: '#111522', rowB: '#0e121d', radius: 0, bar: '#ff3d50', kickBg: '#ff3d50', kickFg: '#ffffff',
+        head: '"Saira Condensed", "Arial Narrow", sans-serif', text: `"Saira", ${SYS}`, num: '"Saira Condensed", "Arial Narrow", sans-serif', hw: 800, italic: true, caps: true },
+      scorebook: { name: 'Scorebook', bg: ['#f7f7f3', '#f7f7f3'], grid: '#e9eae3', fg: '#1b1f1a', body: '#2c312b', sub: '#495046', muted: '#596056', accent: '#1d7a4c', foot: '#6b7268', up: '#1d7a4c', down: '#b5322a', square: true, ring: '#1b1f1a',
+        rowA: '#ffffff', rowB: '#ffffff', line: '#d6d9cf', radius: 0, rule: true, stack: true,
+        head: `"IBM Plex Sans", ${SYS}`, text: `"IBM Plex Sans", ${SYS}`, num: '"IBM Plex Mono", ui-monospace, monospace', hw: 600, caps: false },
+      scorebookDark: { name: 'Scorebook', bg: ['#121518', '#121518'], grid: '#171b1f', fg: '#e3e7e4', body: '#cdd3cf', sub: '#a9b1ac', muted: '#9aa29d', accent: '#4cc38a', foot: '#7d8580', up: '#4cc38a', down: '#ff7b6e', square: true, ring: '#e3e7e4',
+        rowA: '#181c20', rowB: '#181c20', line: '#30373d', radius: 0, rule: true, stack: true,
+        head: `"IBM Plex Sans", ${SYS}`, text: `"IBM Plex Sans", ${SYS}`, num: '"IBM Plex Mono", ui-monospace, monospace', hw: 600, caps: false },
+    };
+    const LOOKS = ['current', 'hardwood', 'broadcast', 'scorebook'];
+    // Scorebook follows the page's light/dark setting like the page itself does.
+    const dark = () => { const t = document.documentElement.dataset.theme; return t === 'dark' || (t !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); };
+    const style = (k) => (k === 'scorebook' && dark() ? IMG.scorebookDark : IMG[k] || IMG.current);
+    const F = (T, kind, wt, px) => `${kind === 'head' && T.italic ? 'italic ' : ''}${wt} ${px}px ${T[kind]}`;
+    const fonts = async (k) => {   // the theme's web fonts must be loaded before the canvas can use them (offline: falls back)
+      const T = style(k); if (k === 'current' || !document.fonts) return;
+      try { window.SLlook && SLlook.font && SLlook.font(k); } catch (e) {}
+      const css = document.getElementById('lk-font-' + k);   // its @font-face rules must arrive before fonts.load can find them
+      if (css && !css.sheet) await new Promise((r) => { css.addEventListener('load', r, { once: true }); css.addEventListener('error', r, { once: true }); setTimeout(r, 2500); });
+      const want = [F(T, 'head', T.hw, 40), F(T, 'text', 400, 26), F(T, 'text', 700, 26), F(T, 'num', T.hw, 34)];
+      await Promise.race([Promise.all(want.map((f) => document.fonts.load(f).catch(() => {}))), new Promise((r) => setTimeout(r, 2500))]);
+    };
+    const fit = (g, s, w) => { s = String(s); if (g.measureText(s).width <= w) return s; while (s.length > 1 && g.measureText(s + '…').width > w) s = s.slice(0, -1); return s.trimEnd() + '…'; };
+    const wrap = (g, s, w) => { const out = []; let line = ''; for (const word of String(s).split(/\s+/)) { const t = line ? line + ' ' + word : word; if (g.measureText(t).width > w && line) { out.push(line); line = word; } else line = t; } if (line) out.push(line); return out.map((l) => fit(g, l, w)); };
+    const caps = (T, s) => (T.caps ? String(s).toUpperCase() : String(s));
+    const spaced = (g, px) => { if ('letterSpacing' in g) g.letterSpacing = `${px}px`; };
+    // Draws text and records its ink box in the current row (for the layout check).
+    const ink = (g, rec, s, x, y) => { g.fillText(s, x, y); if (!rec) return; const m = g.measureText(s);
+      rec.top = Math.min(rec.top, y - m.actualBoundingBoxAscent); rec.bottom = Math.max(rec.bottom, y + m.actualBoundingBoxDescent); rec.right = Math.max(rec.right, x + m.width); };
+    const rrect = (g, x, y, w, h, r) => { g.beginPath(); if (r && g.roundRect) g.roundRect(x, y, w, h, r); else g.rect(x, y, w, h); g.fill(); };
+
+    const HEAD = 214;   // header height: kicker + title (+ the theme's band or rule)
+    const frame = (T, H, kicker, title, hero) => {
+      const TW = W - 2 * PAD - (hero ? 160 : 0);   // a hero picture (Wrapped) sits at the header's right
+      const c = document.createElement('canvas'); c.width = W; c.height = H; c.__layout = []; const g = c.getContext('2d'); g.textBaseline = 'alphabetic';
+      const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, T.bg[0]); grd.addColorStop(1, T.bg[1]); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+      if (T.grid) { g.strokeStyle = T.grid; g.lineWidth = 1; g.beginPath(); for (let x = 0.5; x < W; x += 24) { g.moveTo(x, 0); g.lineTo(x, H); } for (let y = 0.5; y < H; y += 24) { g.moveTo(0, y); g.lineTo(W, y); } g.stroke(); }
+      const head = { top: Infinity, bottom: -Infinity, right: 0 };
+      if (T.band) {   // Hardwood: navy scoreboard band with an orange stripe
+        g.fillStyle = T.band; g.fillRect(0, 0, W, HEAD - 28); g.fillStyle = T.stripe; g.fillRect(0, HEAD - 28, W, 6);
+        g.fillStyle = T.bandKick; g.font = F(T, 'text', 700, 26); spaced(g, 3); ink(g, head, fit(g, kicker.toUpperCase(), W - 2 * PAD), PAD, 70); spaced(g, 0);
+        g.fillStyle = T.bandFg; g.font = F(T, 'head', T.hw, 70); spaced(g, 1); ink(g, head, fit(g, caps(T, title), TW), PAD, 148); spaced(g, 0);
+      } else if (T.kickBg) {   // Broadcast: red slanted label, italic condensed caps title
+        g.font = F(T, 'head', 800, 30); spaced(g, 2); const k = fit(g, kicker.toUpperCase(), W - 2 * PAD - 60); const kw = g.measureText(k).width;
+        g.fillStyle = T.kickBg; g.beginPath(); g.moveTo(PAD - 14, 44); g.lineTo(PAD + kw + 40, 44); g.lineTo(PAD + kw + 26, 92); g.lineTo(PAD - 14, 92); g.fill();
+        g.fillStyle = T.kickFg; ink(g, head, k, PAD, 80); spaced(g, 0);
+        g.fillStyle = T.fg; g.font = F(T, 'head', 800, 66); ink(g, head, fit(g, caps(T, title), TW), PAD, 166);
+        g.fillStyle = T.accent; g.fillRect(PAD, 182, 120, 6);
+      } else if (T.rule) {   // Scorebook: small spaced caps, plain title, hairline rule
+        g.fillStyle = T.muted; g.font = F(T, 'num', 600, 22); spaced(g, 3); ink(g, head, fit(g, kicker.toUpperCase(), W - 2 * PAD), PAD, 86); spaced(g, 0);
+        g.fillStyle = T.fg; g.font = F(T, 'head', 600, 54); ink(g, head, fit(g, title, TW), PAD, 152);
+        g.fillStyle = T.fg; g.fillRect(PAD, 176, W - 2 * PAD, 2);
+      } else {   // Default
+        g.fillStyle = T.accent; g.font = F(T, 'text', 800, 28); spaced(g, 1); ink(g, head, fit(g, kicker.toUpperCase(), W - 2 * PAD), PAD, 86); spaced(g, 0);
+        g.fillStyle = T.fg; g.font = F(T, 'head', 800, 58); ink(g, head, fit(g, title, TW), PAD, 158);
+      }
+      if (hero) drawAv(g, T, hero, W - PAD - 132, 26, 132);
+      g.fillStyle = T.foot; g.font = F(T, 'text', 600, 22); g.fillText('Made with League HQ', PAD, H - 30);
+      c.__layout.push({ kind: 'head', y0: 0, y1: HEAD, ...head });
+      return [c, g];
+    };
+
+    // Pictures: managers' Sleeper avatars (SL.PICS) and player headshots (one sprite, SL.HEADS). Loaded before drawing;
+    // a missing picture falls back to initials on the manager's color. If a picture would taint the canvas, the preview
+    // redraws without pictures (opts.noPics) rather than failing to save.
+    const PIC = new Map(); let SPRITE;
+    const load = (src) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+    const preload = async (mgrs, players) => {
+      const P = SL.PICS || {}, H = SL.HEADS; const jobs = [];
+      for (const m of new Set(mgrs.filter(Boolean))) if (!PIC.has(m) && P[m]) jobs.push(load(P[m]).then((im) => PIC.set(m, im)));
+      if (SPRITE === undefined && H && players.some((p) => H.at[p] != null)) jobs.push(load(H.src).then((im) => { SPRITE = im; }));
+      await Promise.race([Promise.all(jobs), new Promise((r) => setTimeout(r, 3000))]);
+    };
+    let NOPICS = false;
+    const shape = (g, T, x, y, d) => { g.beginPath(); if (T.square) g.rect(x, y, d, d); else g.arc(x + d / 2, y + d / 2, d / 2, 0, Math.PI * 2); };
+    const drawAv = (g, T, name, x, y, d) => {
+      const im = NOPICS ? null : PIC.get(name); g.canvas.__pics = (g.canvas.__pics || 0) + 1;
+      g.save(); shape(g, T, x, y, d); g.clip();
+      if (im) { const s = Math.min(im.width, im.height); g.drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, x, y, d, d); }
+      else { g.fillStyle = SL.avColor ? SL.avColor(name) : T.accent; g.fillRect(x, y, d, d); g.fillStyle = '#ffffff'; g.font = `700 ${Math.round(d * 0.38)}px ${SYS}`; g.textAlign = 'center';
+        g.fillText(String(name).replace(/[^A-Za-z0-9]/g, '').slice(0, 2), x + d / 2, y + d * 0.64); g.textAlign = 'left'; }
+      g.restore(); g.strokeStyle = T.ring || T.line || 'rgba(255,255,255,0.25)'; g.lineWidth = Math.max(2, d / 28); shape(g, T, x, y, d); g.stroke();
+    };
+    const hasHead = (p) => !NOPICS && SPRITE && SL.HEADS && SL.HEADS.at[p] != null;
+    const drawHead = (g, T, player, x, y, d) => {   // a player's headshot in a rounded square on the card color
+      const H = SL.HEADS, i = H.at[player], cell = SPRITE.width / H.cols;
+      g.save(); g.fillStyle = T.rowB === T.rowA ? T.bg[0] : T.rowA; g.beginPath(); if (g.roundRect && !T.square) g.roundRect(x, y, d, d, d / 3); else g.rect(x, y, d, d); g.fill(); g.clip();
+      g.drawImage(SPRITE, (i % H.cols) * cell, Math.floor(i / H.cols) * cell, cell, cell, x, y, d, d); g.restore();
+      g.strokeStyle = T.accent; g.lineWidth = 2; g.beginPath(); if (g.roundRect && !T.square) g.roundRect(x, y, d, d, d / 3); else g.rect(x, y, d, d); g.stroke();
+    };
+
+    // List image. items: [{emoji?, label?, title, sub?, right?, av? (manager), player?}]. A row's height follows its lines.
+    const LH = { pad: 20, label: 24, title: 36, sub: 32 }, AV = 60;
+    const rowH = (r) => Math.max(LH.pad * 2 + (r.label ? LH.label : 0) + LH.title + (r.sub ? LH.sub : 0) - 4, r.av || r.player ? AV + 28 : 0);
+    const GAP = (T) => (T.stack ? 0 : 12);
+    const drawList = (look, kicker, title, items, opts = {}) => {
+      const T = style(look); const H = HEAD + items.reduce((a, r) => a + rowH(r) + GAP(T), 0) + 80;
+      const [c, g] = frame(T, H, kicker, title, opts.hero);
+      let y = HEAD;
+      items.forEach((r, i) => {
+        const h = rowH(r); const x0 = PAD - 20, w = W - 2 * PAD + 40;
+        g.fillStyle = i % 2 ? T.rowB : T.rowA; rrect(g, x0, y, w, h, T.radius);
+        if (T.line) { g.strokeStyle = T.line; g.lineWidth = 1; if (T.stack) { g.beginPath(); g.moveTo(x0, y + h - 0.5); g.lineTo(x0 + w, y + h - 0.5); if (!i) { g.moveTo(x0, y + 0.5); g.lineTo(x0 + w, y + 0.5); } g.stroke(); } else { g.strokeRect(x0 + 0.5, y + 0.5, w - 1, h - 1); } }
+        if (T.bar) { g.fillStyle = T.bar; g.fillRect(x0, y, 6, h); }
+        const rec = { kind: 'row', y0: y, y1: y + h, top: Infinity, bottom: -Infinity, right: 0 };
+        let x = PAD;
+        if (r.emoji) { g.fillStyle = T.fg; g.font = `400 38px ${SYS}`; ink(g, rec, r.emoji, x, y + h / 2 + 13); x += 60; }
+        const ay = y + (h - AV) / 2;
+        if (r.av) { drawAv(g, T, r.av, x, ay, AV); if (r.player && hasHead(r.player)) drawHead(g, T, r.player, x + AV - 22, ay + AV - 26, 34); x += AV + (r.player && hasHead(r.player) ? 26 : 18); }
+        else if (r.player && hasHead(r.player)) { drawHead(g, T, r.player, x, ay, AV); x += AV + 18; }
+        let rw = 0;
+        if (r.right) { g.font = F(T, 'num', T.hw, 36); rw = g.measureText(r.right).width + 24; }
+        const tw = W - x - PAD - rw;
+        const used = (r.label ? LH.label : 0) + LH.title + (r.sub ? LH.sub : 0) - 4; let by = y + (h - used) / 2 - 2;
+        if (r.label) { by += LH.label - 4; g.fillStyle = T.muted; g.font = F(T, 'text', 700, 19); spaced(g, 1.5); ink(g, rec, fit(g, r.label.toUpperCase(), tw), x, by); spaced(g, 0); }
+        by += LH.title - (r.label ? 0 : 6); g.fillStyle = T.fg; g.font = F(T, T.caps && T.italic ? 'head' : 'text', T.caps && T.italic ? 800 : 700, T.caps && T.italic ? 34 : 30);
+        ink(g, rec, fit(g, r.title, tw), x, by);
+        if (r.sub) { by += LH.sub - 2; g.fillStyle = T.sub; g.font = F(T, 'text', 500, 22); ink(g, rec, fit(g, r.sub, tw), x, by); }
+        if (r.right) { g.fillStyle = r.rightColor ? T[r.rightColor] || T.accent : T.accent; g.font = F(T, 'num', T.hw, 36); ink(g, rec, r.right, W - PAD - g.measureText(r.right).width, y + h / 2 + 13); }
+        c.__layout.push(rec); y += h + GAP(T);
+      });
+      return c;
+    };
+
+    // The newsletter, laid out like its card: intro, accent section labels, bullets, and one block per team with the
+    // manager's picture, team name, "manager · record", the move arrow, the stat line and the blurb.
+    // opts.names: the managers in this week's rankings (a line is a team entry only if it names one of them).
+    const parseNews = (md, names) => {
+      const out = []; let ent = null;
+      for (const raw of String(md).split(/\r?\n/)) {
+        const line = raw.trim(); if (!line) { ent = null; continue; }
+        const plain = line.replace(/\*\*/g, '').trim();
+        const m = plain.match(/^(\d+)\.\s+(.*?)\s*\(([^,()]+),\s*([\d-]+)\)\s*(.*)$/);
+        if (m && names.includes(m[3].trim())) { const mv = m[5].trim().match(/^([▲▼])(\d+)/);
+          ent = { k: 'ent', rank: m[1], team: m[2], mgr: m[3].trim(), rec: m[4], move: mv ? (mv[1] === '▲' ? +mv[2] : -mv[2]) : 0, stat: '', lines: [] }; out.push(ent); continue; }
+        if (ent && /^\d[\d.,]*\s*PPG\b/.test(plain)) { ent.stat = plain; continue; }
+        if (ent && /^\s/.test(raw)) { ent.lines.push(plain); continue; }
+        ent = null;
+        if (/^[•\-]\s+/.test(plain)) out.push({ k: 'bul', s: plain.replace(/^[•\-]\s+/, '') });
+        else if (/^_.*_$/.test(line) || /^Power score\b/.test(plain)) out.push({ k: 'foot', s: plain.replace(/^_|_$/g, '') });
+        else if (/^[^A-Za-z0-9"'(#]/.test(plain) && plain.length <= 40 && (/^\*\*.*\*\*$/.test(line) || plain === plain.toUpperCase())) out.push({ k: 'sec', s: plain });
+        else out.push({ k: 'p', s: plain.replace(/\s+[–-]$/, '') });
+      }
+      return out;
+    };
+    const drawText = (look, kicker, title, md, opts = {}) => {
+      const T = style(look); const items = parseNews(md, opts.names || []);
+      const probe = document.createElement('canvas').getContext('2d');
+      const BODY = 24, LINE = 34, MAXW = W - 2 * PAD, EAV = 64, BX = PAD + EAV + 20;
+      const fT = (wt, px) => F(T, 'text', wt, px);
+      // measure: each block gets its wrapped lines and height
+      for (const it of items) {
+        if (it.k === 'p') { probe.font = fT(400, BODY); it.w = wrap(probe, it.s, MAXW); it.h = it.w.length * LINE + 10; }
+        else if (it.k === 'bul') { probe.font = fT(400, BODY); it.w = wrap(probe, it.s, MAXW - 28); it.h = it.w.length * LINE + 4; }
+        else if (it.k === 'sec') it.h = 66;
+        else if (it.k === 'foot') { probe.font = fT(400, 19); it.w = wrap(probe, it.s, MAXW); it.h = it.w.length * 28 + 14; }
+        else { probe.font = fT(400, 22); it.w = it.lines.flatMap((l) => wrap(probe, l, MAXW - 40)); it.h = 24 + EAV + (it.stat ? 34 : 0) + it.w.length * 31 + 22 + GAP(T); }
+      }
+      const H = Math.min(HEAD + 16 + items.reduce((a, it) => a + it.h, 0) + 80, 16000); const [c, g] = frame(T, H, kicker, title); c.__entries = items.filter((it) => it.k === 'ent').length;
+      let y = HEAD + 16;
+      for (const it of items) {
+        if (y + it.h > H - 60) break;
+        const rec = { kind: it.k, y0: y, y1: y + it.h, top: Infinity, bottom: -Infinity, right: 0 };
+        if (it.k === 'p') { g.fillStyle = T.body; g.font = fT(400, BODY); it.w.forEach((l, j) => ink(g, rec, l, PAD, y + 26 + j * LINE)); }
+        else if (it.k === 'bul') { g.fillStyle = T.accent; g.beginPath(); g.arc(PAD + 6, y + 17, 5, 0, Math.PI * 2); g.fill(); g.fillStyle = T.body; g.font = fT(400, BODY); it.w.forEach((l, j) => ink(g, rec, l, PAD + 28, y + 26 + j * LINE)); }
+        else if (it.k === 'sec') { g.fillStyle = T.accent; g.font = T.caps ? F(T, 'head', T.hw, 32) : fT(800, 24); spaced(g, T.caps ? 1 : 2); ink(g, rec, fit(g, it.s.toUpperCase(), MAXW), PAD, y + 50); spaced(g, 0); }
+        else if (it.k === 'foot') { g.fillStyle = T.muted; g.font = fT(400, 19); it.w.forEach((l, j) => ink(g, rec, l, PAD, y + 28 + j * 28)); }
+        else {
+          const x0 = PAD - 20, w = W - 2 * PAD + 40, h = it.h - GAP(T);
+          g.fillStyle = T.rowA; rrect(g, x0, y, w, h, T.radius);
+          if (T.line) { g.strokeStyle = T.line; g.lineWidth = 1; g.strokeRect(x0 + 0.5, y + 0.5, w - 1, h - 1); }
+          if (T.bar) { g.fillStyle = T.bar; g.fillRect(x0, y, 6, h); }
+          drawAv(g, T, it.mgr, PAD, y + 22, EAV);
+          const mv = it.move > 0 ? '▲' + it.move : it.move < 0 ? '▼' + -it.move : '–';
+          g.font = F(T, 'num', T.hw, 30); const mw = g.measureText(mv).width;
+          g.fillStyle = it.move > 0 ? T.up || T.accent : it.move < 0 ? T.down || T.muted : T.muted; ink(g, rec, mv, W - PAD - mw, y + 56);
+          g.fillStyle = T.fg; g.font = T.caps && T.italic ? F(T, 'head', 800, 34) : fT(800, 30); ink(g, rec, fit(g, `${it.rank}. ${it.team}`, W - BX - PAD - mw - 20), BX, y + 52);
+          g.fillStyle = T.sub; g.font = fT(500, 22); ink(g, rec, fit(g, `${it.mgr} · ${it.rec}`, W - BX - PAD - mw - 20), BX, y + 82);
+          let ly = y + 24 + EAV + 8;
+          if (it.stat) { ly += 26; g.fillStyle = T.muted; g.font = F(T, 'num', 600, 20); ink(g, rec, fit(g, it.stat, MAXW - 20), PAD, ly); ly += 8; }
+          g.fillStyle = T.body; g.font = fT(400, 22); it.w.forEach((l) => { ly += 31; ink(g, rec, l, PAD, ly); });
+        }
+        c.__layout.push(rec); y += it.h;
+      }
+      return c;
+    };
+
+    const finish = async (blob, name, title) => {
       try { const f = new File([blob], name, { type: 'image/png' }); if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     };
-    const frame = (H, kicker, title) => {
-      const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
-      const grd = g.createLinearGradient(0, 0, W, H); grd.addColorStop(0, '#0f131d'); grd.addColorStop(1, '#1b1730'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
-      g.fillStyle = '#00d3b3'; g.font = font(800, 30); g.fillText(kicker.toUpperCase(), PAD, 88);
-      g.fillStyle = '#f3f5fa'; g.font = font(800, 58); g.fillText(fit(g, title, W - 2 * PAD), PAD, 160);
-      g.fillStyle = '#4a5268'; g.font = font(600, 20); g.fillText('Made with League HQ', PAD, H - 26);
-      return [c, g];
-    };
-    // rows: [{emoji?, label?, title, sub?, right?}]
-    const list = (kicker, title, items, name) => {
-      const rowH = 92, top = 210; const [c, g] = frame(top + items.length * rowH + 70, kicker, title);
-      items.forEach((r, i) => {
-        const y = top + i * rowH; g.fillStyle = i % 2 ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.06)'; g.fillRect(PAD - 20, y, W - 2 * PAD + 40, rowH - 10);
-        let x = PAD; if (r.emoji) { g.fillStyle = '#fff'; g.font = font(400, 40); g.fillText(r.emoji, x, y + 56); x += 70; }
-        const rw = r.right ? (g.font = font(800, 34), g.measureText(r.right).width + 20) : 0;
-        if (r.label) { g.fillStyle = '#8b94aa'; g.font = font(700, 20); g.fillText(fit(g, r.label.toUpperCase(), W - x - PAD - rw), x, y + 28); }
-        g.fillStyle = '#f3f5fa'; g.font = font(800, 30); g.fillText(fit(g, r.title, W - x - PAD - rw), x, y + (r.label ? 62 : 44));
-        if (r.sub) { g.fillStyle = '#b8c0d4'; g.font = font(500, 22); g.fillText(fit(g, r.sub, W - x - PAD - rw), x, y + (r.label ? 84 : 74)); }
-        if (r.right) { g.fillStyle = '#00d3b3'; g.font = font(800, 34); g.fillText(r.right, W - PAD - g.measureText(r.right).width, y + 54); }
-      });
-      return finish(c, name, title);
-    };
-    const text = (kicker, title, md, name) => {   // the newsletter: headings bold, bullets kept, ** stripped
-      const probe = document.createElement('canvas').getContext('2d'); const lines = [];
-      for (const raw of String(md).split('\n')) {
-        const t = raw.trim(); if (!t) { lines.push({ gap: true }); continue; }
-        const head = /^\*\*[^*]+\*\*$/.test(t) || /^#+ /.test(t); const s = t.replace(/\*\*/g, '').replace(/^#+ /, '').replace(/^_(.*)_$/, '$1');
-        probe.font = head ? font(800, 30) : font(500, 26);
-        for (const l of wrap(probe, s, W - 2 * PAD)) lines.push({ s: l, head });
+
+    // Preview: the image as it will be saved, theme chips to redraw it in another look, Save / Cancel.
+    // The PNG is made while previewing, so Save shares straight from the tap (phones need that).
+    let dlg = null;
+    const preview = (draw, name, title, need = [[], []]) => {
+      const host = document.querySelector('.sl') || document.body;
+      if (!dlg) {
+        dlg = document.createElement('dialog'); dlg.className = 'shp'; dlg.setAttribute('aria-label', 'Image preview');
+        dlg.innerHTML = '<div class="shp-top"><b>Preview</b><span class="shp-hint">Pick a theme for the image</span></div><div class="shp-looks" role="group" aria-label="Image theme"></div><div class="shp-img"><img alt=""></div><div class="shp-act"><button class="shp-cancel" type="button">Cancel</button><button class="shp-save" type="button">📤 Save image</button></div>';
+        dlg.addEventListener('click', (e) => { if (e.target === dlg) dlg.close(); });
+        dlg.querySelector('.shp-cancel').onclick = () => dlg.close();
       }
-      while (lines.length && lines[0].gap) lines.shift();
-      const H = 220 + lines.reduce((a, l) => a + (l.gap ? 14 : l.head ? 44 : 36), 0) + 60; const [c, g] = frame(Math.min(H, 16000), kicker, title);
-      let y = 220; for (const l of lines) { if (l.gap) { y += 14; continue; } g.fillStyle = l.head ? '#f3f5fa' : '#c7cede'; g.font = l.head ? font(800, 30) : font(500, 26); y += l.head ? 44 : 36; g.fillText(l.s, PAD, y - 8); }
-      return finish(c, name, title);
+      host.append(dlg);
+      const box = dlg.querySelector('.shp-looks'), img = dlg.querySelector('img'), save = dlg.querySelector('.shp-save');
+      let look = LOOKS.includes(window.SLlook && SLlook.get()) ? SLlook.get() : 'current', blob = null, seq = 0;
+      const render = async () => {
+        const my = ++seq; blob = null; save.disabled = true; dlg.dataset.look = look;
+        box.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.look === look)));
+        await Promise.all([fonts(look), preload(...need)]); if (my !== seq) return;
+        let c = draw(look), b;
+        try { b = await new Promise((res) => c.toBlob(res, 'image/png')); } catch (e) { NOPICS = true; c = draw(look); NOPICS = false; b = await new Promise((res) => c.toBlob(res, 'image/png')); }
+        dlg.__canvas = c; if (my !== seq) return;
+        blob = b; if (img.dataset.url) URL.revokeObjectURL(img.dataset.url); img.dataset.url = URL.createObjectURL(b); img.src = img.dataset.url;
+        img.alt = `${title} (${style(look).name} theme)`; save.disabled = false;
+      };
+      box.replaceChildren(...LOOKS.map((k) => { const b = document.createElement('button'); b.type = 'button'; b.dataset.look = k; b.textContent = IMG[k].name; b.onclick = () => { look = k; render(); }; return b; }));
+      save.onclick = async () => { if (!blob) return; const b = blob; dlg.close(); await finish(b, name, title); };
+      if (!dlg.open) dlg.showModal();
+      return render();
     };
-    window.SLshare = { list, text };
+    const list = (kicker, title, items, name, opts = {}) => preview((look) => drawList(look, kicker, title, items, opts), name, title, [[...items.map((r) => r.av), opts.hero], items.map((r) => r.player)]);
+    const text = (kicker, title, md, name, opts = {}) => preview((look) => drawText(look, kicker, title, md, opts), name, title, [opts.names || [], []]);
+    window.SLshare = { list, text, drawList, drawText, preload, looks: LOOKS };
     const repKey = () => { const k = (rows('reports') || []).map((r) => r.key).sort(); const p = param('rweek', null); return k.includes(p) ? p : k[k.length - 1]; };
     const pct = (v) => `${d3.format('.1f')(+v)}%`;
     const KINDS = {
       ranks: () => { const k = repKey(); const rr = (rows('report_rankings') || []).filter((r) => r.key === k).sort((a, b) => a.rank - b.rank); if (!rr.length) return;
-        const [s, w] = k.split('-'); return list('League HQ · Power rankings', `${s} · Week ${+w}`, rr.map((r) => ({ title: `${r.rank}. ${r.team}`, sub: `${r.manager} · ${r.wins}-${r.losses}${+r.ties ? '-' + r.ties : ''} · ${r.ppw} PPG · ${+r.move > 0 ? '▲' + r.move : +r.move < 0 ? '▼' + -r.move : '–'}`, right: d3.format('.1f')(+r.score) })), `power-rankings-${k}.png`); },
-      news: () => { const k = repKey(); const r = (rows('reports') || []).find((x) => x.key === k); if (!r) return; return text('League HQ · Newsletter', r.label, r.text.replace(/^.*\n/, ''), `newsletter-${k}.png`); },
-      odds: () => { const o = rows('race_odds'); if (!o) return; return list('League HQ · Playoff odds', `${o[0].season} · after week ${o[0].weeks_final}`, [...o].sort((a, b) => b.playoffs - a.playoffs).map((r) => ({ title: r.manager, sub: `${r.record} · title ${pct(r.title)} · bye ${pct(r.bye)}`, right: pct(r.playoffs) })), 'playoff-odds.png'); },
+        const [s, w] = k.split('-'); return list('League HQ · Power rankings', `${s} · Week ${+w}`, rr.map((r) => ({ av: r.manager, title: `${r.rank}. ${r.team}`, sub: `${r.manager} · ${r.wins}-${r.losses}${+r.ties ? '-' + r.ties : ''} · ${r.ppw} PPG · ${+r.move > 0 ? '▲' + r.move : +r.move < 0 ? '▼' + -r.move : '–'}`, right: d3.format('.1f')(+r.score) })), `power-rankings-${k}.png`); },
+      news: () => { const k = repKey(); const r = (rows('reports') || []).find((x) => x.key === k); if (!r) return; return text('League HQ · Newsletter', r.label, r.text.replace(/^.*\n/, ''), `newsletter-${k}.png`, { names: (rows('report_rankings') || []).filter((x) => x.key === k).map((x) => x.manager) }); },
+      odds: () => { const o = rows('race_odds'); if (!o) return; return list('League HQ · Playoff odds', `${o[0].season} · after week ${o[0].weeks_final}`, [...o].sort((a, b) => b.playoffs - a.playoffs).map((r) => ({ av: r.manager, title: r.manager, sub: `${r.record} · title ${pct(r.title)} · bye ${pct(r.bye)}`, right: pct(r.playoffs) })), 'playoff-odds.png'); },
       standings: () => { const b = document.querySelector('[data-season][aria-pressed="true"]'); const s = b ? b.dataset.season : ''; const ss = (rows('seasons') || []).filter((r) => r.season === s).sort((a, b) => b.win_pct - a.win_pct || b.pf - a.pf); if (!ss.length) return;
-        return list('League HQ · Standings', s, ss.map((r, i) => ({ title: `${i + 1}. ${r.team}`, sub: `${r.manager} · ${r.pf_per_week} PPG${r.champion === '1' ? ' · 🏆 champion' : ''}`, right: `${r.wins}-${r.losses}${+r.ties ? '-' + r.ties : ''}` })), `standings-${s}.png`); },
+        return list('League HQ · Standings', s, ss.map((r, i) => ({ av: r.manager, title: `${i + 1}. ${r.team}`, sub: `${r.manager} · ${r.pf_per_week} PPG${r.champion === '1' ? ' · 🏆 champion' : ''}`, right: `${r.wins}-${r.losses}${+r.ties ? '-' + r.ties : ''}` })), `standings-${s}.png`); },
       wrapped: () => { const w = rows('wrapped'); if (!w) return; const ss = [...new Set(w.map((r) => r.season))].sort(); const s = param('ws', ss[ss.length - 1]); const m = param('wm', SL.pick()); const r = w.find((x) => x.season === s && x.manager === m); if (!r) return;
         const it = [{ emoji: '🎁', label: 'Persona', title: r.persona, sub: r.persona_why }, { emoji: '📈', label: 'Points a week', title: `${r.ppw}`, sub: `#${r.ppw_rank} in scoring · ${r.wins}-${r.losses}${+r.ties ? '-' + r.ties : ''}` }];
-        if (r.mvp) it.push({ emoji: '⭐', label: 'MVP', title: r.mvp, sub: `${r.mvp_pts} pts in ${r.mvp_starts} starts` });
+        if (r.mvp) it.push({ emoji: '⭐', label: 'MVP', player: r.mvp, title: r.mvp, sub: `${r.mvp_pts} pts in ${r.mvp_starts} starts` });
         if (r.best_wk) it.push({ emoji: '🔥', label: 'Best week', title: `${r.best_wk_pts}`, sub: `week ${r.best_wk} vs ${r.best_wk_opp}` });
-        if (r.top_game) it.push({ emoji: '💥', label: 'Best single score', title: `${r.top_game_pts}`, sub: `${r.top_game}, week ${r.top_game_wk}` });
-        if (r.nemesis) it.push({ emoji: '😈', label: 'Nemesis', title: r.nemesis, sub: r.nemesis_rec });
+        if (r.top_game) it.push({ emoji: '💥', label: 'Best single score', player: r.top_game, title: `${r.top_game_pts}`, sub: `${r.top_game}, week ${r.top_game_wk}` });
+        if (r.nemesis) it.push({ emoji: '😈', label: 'Nemesis', av: r.nemesis, title: r.nemesis, sub: r.nemesis_rec });
         it.push({ emoji: '🔒', label: 'Locks', title: `${r.locks}`, sub: r.lock_eff ? `${d3.format('.1%')(r.lock_eff)} efficiency` : '' }, { emoji: '🍀', label: 'Luck', title: `${+r.luck_wins > 0 ? '+' : ''}${r.luck_wins} wins`, sub: 'vs what the scores deserved' }, { emoji: '👑', label: 'Weekly crowns', title: `${r.crowns}`, sub: `longest win streak ${r.win_streak || 0}` });
-        return list(`${s} Wrapped${r.complete === '1' ? '' : ' (so far)'}`, m, it, `wrapped-${s}-${m}.png`); },
+        return list(`League HQ · ${s} Wrapped${r.complete === '1' ? '' : ' (so far)'}`, m, it, `wrapped-${s}-${m}.png`, { hero: m }); },
     };
     document.addEventListener('click', (e) => { const b = e.target.closest('[data-share]'); if (!b) return; const f = KINDS[b.dataset.share]; if (f) f(); });
   })();
@@ -1702,7 +1908,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       const [s, w] = k.split('-'); const list = aw.filter((r) => r.season === s && +r.week === +w);
       return { s, w: +w, list: list.sort((a, b) => ORDER.indexOf(a.award) - ORDER.indexOf(b.award)) };
     };
-    const shareImage = (s, w, list) => window.SLshare.list('League HQ · Weekly awards', `${s} · Week ${w}`, list.map((r) => ({ emoji: r.emoji, label: r.award, title: r.manager, sub: r.detail })), `awards-${s}-week-${w}.png`);
+    const shareImage = (s, w, list) => window.SLshare.list('League HQ · Weekly awards', `${s} · Week ${w}`, list.map((r) => ({ emoji: r.emoji, label: r.award, av: r.manager, player: r.player, title: r.manager, sub: r.detail })), `awards-${s}-week-${w}.png`);
     dash.draw('weekawards', (node) => {
       const x = weekAwards(); if (!x) return empty(node, ['week_awards', 'reports']);
       if (!x.list.length) { node.replaceChildren(el('p', 'muted', 'No awards for this week yet.')); return; }
