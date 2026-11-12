@@ -28,7 +28,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
 /*THEME-CORE*/ // Same block in every league page (a test keeps the copies equal).
 // Sets <html data-look> before the page paints, loads the theme's web fonts, and fills every <select class="lk-pick">.
 (() => {
-  const LOOKS = { current: 'Current', hardwood: 'Hardwood', broadcast: 'Broadcast', scorebook: 'Scorebook' };
+  const LOOKS = { current: 'Default', hardwood: 'Hardwood', broadcast: 'Broadcast', scorebook: 'Scorebook' };
   const FONTS = { hardwood: 'family=Barlow:wght@400;600;700&family=Big+Shoulders+Display:wght@700;900',
     broadcast: 'family=Saira+Condensed:ital,wght@0,600;0,800;1,800&family=Saira:wght@400;600;700',
     scorebook: 'family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700' };
@@ -412,7 +412,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   }
 
   /* ================= THEMES =================
-     <html data-look="hardwood|broadcast|scorebook"> switches the look; no attribute = Current (the default above).
+     <html data-look="hardwood|broadcast|scorebook"> switches the look; no attribute = Default (the look above).
      Each theme only redefines the tokens on .sl plus a few shape and type rules. Picked in the header (lk-pick),
      saved in localStorage 'league-look', so every league page on the same site opens in the same look. */
   .sl .lk { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; color: var(--muted); }
