@@ -114,6 +114,19 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
   .sl .li .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .sl .li .rk { width: 18px; color: var(--muted); font-weight: 700; text-align: center; flex: none; }
   .sl .li.me { background: color-mix(in srgb, var(--mint) 7%, transparent); margin: 0 -14px; padding-left: 14px; padding-right: 14px; }
+  /* Phone: names and detail lines wrap instead of being cut off with an ellipsis (every .li list: odds, value, managers, report...) */
+  @media (max-width: 640px) {
+    .sl .li { align-items: flex-start; }
+    .sl .li .nm, .sl .li .tm { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: break-word; line-height: 1.25; }
+    .sl .li .tm { margin-top: 1px; }
+    .sl .li .rk, .sl .li .num { align-self: center; }
+    .sl .li > .av, .sl .li > img { margin-top: 2px; }
+    /* Playoff odds: name and record get the full width, the three odds sit on a second line under them */
+    .sl .odds .li { flex-wrap: wrap; row-gap: 4px; }
+    .sl .odds .li .grow { flex: 1 1 calc(100% - 72px); }
+    .sl .odds .li .num { align-self: flex-start; }
+    .sl .odds .li .grow + .num { margin-left: 62px; }
+  }
   .sl .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; background: var(--card2); color: var(--muted); white-space: nowrap; }
   .sl .pill.w { background: color-mix(in srgb, var(--mint) 16%, transparent); color: var(--mint); }
   .sl .pill.l { background: color-mix(in srgb, var(--pink) 16%, transparent); color: var(--pink); }
