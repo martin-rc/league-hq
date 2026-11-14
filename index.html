@@ -1202,6 +1202,22 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       };
     };
     const svgIn = (node, w, h) => d3.select(node).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${w} ${h}`).attr('height', h);
+  /*CHASECORE*/
+  // Record chase, this week's team totals: starters only (locked or open slots). The live_slots table also lists the bench
+  // and IR, whose points are not scored, and they used to be added in (356 "on the board" for a team with 263.5 in its lineup).
+  // A starter who is ruled out can't add anything, so he keeps his score instead of riding his average.
+  window.SLCHASE = { byTeam(live) {
+    const t = {};
+    for (const r of live) {
+      if (r.status !== 'locked' && r.status !== 'open') continue;
+      const s = +r.score || 0, o = t[r.manager] || (t[r.manager] = { now: 0, proj: 0, left: 0 });
+      const out = /^out\b/i.test(r.injury || '');
+      o.now += s; o.left += out ? 0 : (+r.left || 0);
+      o.proj += r.status === 'open' && +r.left > 0 && !out ? Math.max(s, +r.avg || 0) : s;
+    }
+    return Object.entries(t).sort((a, b) => b[1].proj - a[1].proj);
+  } };
+  /*CHASEEND*/
     /*DODGECORE*/
     // Label placement for narrow screens. endLabels: y positions (any order) pushed apart to at least `gap`, kept inside
     // [lo, hi], returned in the input order. place: for point labels {x, y, w, h, mine}, the first spot (above, below,
@@ -4011,8 +4027,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       const out = [], cw = curWeek(), live = ls.filter((r) => +r.week === cw);
       const top = d3.greatest(w, (r) => +r.points);
       if (top) {
-        const by = d3.rollups(live, (v) => ({ now: d3.sum(v, (r) => +r.score || 0), proj: d3.sum(v, (r) => (r.status === 'open' && +r.left > 0 ? Math.max(+r.score || 0, +r.avg || 0) : +r.score || 0)), left: d3.sum(v, (r) => +r.left || 0) }), (r) => r.manager)
-          .sort((a, b) => b[1].proj - a[1].proj);
+        const by = window.SLCHASE.byTeam(live);
         const rec = +top.points, near = by.filter(([, v]) => v.proj >= rec * 0.85).slice(0, 2);
         out.push(li(top.manager, `Team record: ${f1(rec)}`, `${top.manager}, ${top.season} week ${top.week}`, '🔝'));
         for (const [m, v] of near) out.push(li(m, v.now > rec ? `${m} is above the record right now` : `${m} is ${f1(rec - v.now)} short of it`, `${f1(v.now)} on the board with ${v.left} games left; riding open slots at their averages gives about ${f1(v.proj)}`));
@@ -4020,7 +4035,7 @@ let lastW = 0; window.addEventListener('resize', () => { if (Math.abs(innerWidth
       }
       const pt = d3.greatest(p, (r) => +r.points);
       if (pt) {
-        const bestNow = d3.greatest(live, (r) => +r.score || 0);
+        const bestNow = d3.greatest(live.filter((r) => r.status === 'locked' || r.status === 'open'), (r) => +r.score || 0);
         out.push(li(pt.manager, `Player record: ${pt.player} ${f1(pt.points)}`, `${pt.manager}, ${pt.season} week ${pt.week}. It takes a ${f1(+pt.points + 0.5)}-point game to break it` + (bestNow && +bestNow.score ? `; best this week so far: ${bestNow.player} ${f1(bestNow.score)}` : ''), '🔥'));
       }
       const wr = d3.max(mx, (r) => +r.win_streak || 0), lr = d3.max(mx, (r) => +r.loss_streak || 0);
